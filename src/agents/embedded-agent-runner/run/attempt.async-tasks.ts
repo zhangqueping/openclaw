@@ -13,6 +13,7 @@ export type AsyncStartedToolMeta = {
   asyncTaskId?: string;
 };
 
+/** Summary returned after waiting for cron media tasks that must finish. */
 export type CompletionRequiredAsyncTaskWaitResult = {
   waitedRunIds: string[];
   timedOutRunIds: string[];
@@ -130,6 +131,10 @@ function findTerminalTasks(runIds: readonly string[]): {
   return { pendingRunIds, terminalTasks };
 }
 
+/**
+ * Returns whether this run must wait for completion-required async media tasks
+ * before considering the cron attempt complete.
+ */
 export function requiresCompletionRequiredAsyncTaskWait(params: {
   sessionKey: string | undefined;
   toolMetas: readonly AsyncStartedToolMeta[];
@@ -153,6 +158,10 @@ export function requiresCompletionRequiredAsyncTaskWait(params: {
   );
 }
 
+/**
+ * Polls async task records until completion-required media tasks reach terminal
+ * status, the deadline expires, or the run abort signal fires.
+ */
 export async function waitForCompletionRequiredAsyncTasks(params: {
   getToolMetas: () => readonly AsyncStartedToolMeta[];
   sessionKey?: string;
@@ -171,6 +180,8 @@ export async function waitForCompletionRequiredAsyncTasks(params: {
 
   while (true) {
     throwIfAborted(params.abortSignal);
+    // New async tasks can be discovered while earlier tasks are finishing, so
+    // rescan tool metadata and the task registry after every completed batch.
     const runIds = collectAsyncTaskRunIds(params.getToolMetas(), params.sessionKey, waitedRunIds);
     if (runIds.length === 0) {
       return {
