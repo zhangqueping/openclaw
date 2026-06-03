@@ -87,7 +87,7 @@ describe("transcript events", () => {
         agentId: "main",
         sessionId: "sess-1",
         sessionKey: "agent:main:main",
-        targetKind: "runtime-session",
+        targetKind: "active-session-file",
       },
       agentId: "main",
       sessionId: "sess-1",

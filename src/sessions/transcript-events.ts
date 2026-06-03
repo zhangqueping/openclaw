@@ -80,6 +80,7 @@ function normalizeUpdateTarget(update: {
   agentId?: string;
   sessionId?: string;
   sessionKey?: string;
+  sessionFile?: string;
   target?: SessionTranscriptUpdate["target"];
 }): SessionTranscriptUpdateTarget | undefined {
   const sessionKey =
@@ -93,7 +94,11 @@ function normalizeUpdateTarget(update: {
     normalizeOptionalString(update.target?.sessionId) ?? normalizeOptionalString(update.sessionId);
   const targetKind =
     normalizeTargetKind(update.target?.targetKind) ??
-    (agentId && sessionId && sessionKey ? "runtime-session" : undefined);
+    (agentId && sessionId && sessionKey
+      ? normalizeOptionalString(update.sessionFile)
+        ? "active-session-file"
+        : "runtime-session"
+      : undefined);
   if (!agentId || !sessionId || !sessionKey || !targetKind) {
     return undefined;
   }

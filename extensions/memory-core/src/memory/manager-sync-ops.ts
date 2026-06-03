@@ -1059,13 +1059,13 @@ export abstract class MemoryManagerSyncOps {
       agentId: string;
       sessionId: string;
       sessionKey: string;
-      targetKind?: string;
+      targetKind: "active-session-file" | "runtime-session";
     };
   }): MemorySessionSyncTarget | null {
     if (update.sessionFile && isSessionArchiveArtifactName(path.basename(update.sessionFile))) {
       return null;
     }
-    if (update.target && update.target.targetKind !== "active-session-file") {
+    if (update.target?.targetKind === "runtime-session") {
       const agentId = update.target.agentId.trim();
       const sessionId = update.target.sessionId.trim();
       const sessionKey = update.target.sessionKey.trim();
