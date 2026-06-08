@@ -49,6 +49,20 @@ if ! declare -F docker_e2e_docker_run_resource_args >/dev/null 2>&1; then
     return 1
   }
 
+  docker_e2e_default_cpus() {
+    local fallback="${OPENCLAW_DOCKER_E2E_DEFAULT_CPUS:-16}"
+    local host_cpus=""
+    if command -v docker >/dev/null 2>&1; then
+      host_cpus="$(docker info --format '{{.NCPU}}' 2>/dev/null || true)"
+      host_cpus="${host_cpus//[^0-9]/}"
+    fi
+    if [[ "$fallback" =~ ^[0-9]+$ ]] && [[ "$host_cpus" =~ ^[0-9]+$ ]] && [ "$host_cpus" -gt 0 ] && [ "$host_cpus" -lt "$fallback" ]; then
+      printf '%s\n' "$host_cpus"
+      return
+    fi
+    printf '%s\n' "$fallback"
+  }
+
   docker_e2e_docker_run_resource_args() {
     DOCKER_E2E_RUN_RESOURCE_ARGS=()
     if docker_e2e_resource_limits_disabled; then
@@ -56,7 +70,7 @@ if ! declare -F docker_e2e_docker_run_resource_args >/dev/null 2>&1; then
     fi
 
     local memory="${OPENCLAW_DOCKER_E2E_MEMORY:-8g}"
-    local cpus="${OPENCLAW_DOCKER_E2E_CPUS:-16}"
+    local cpus="${OPENCLAW_DOCKER_E2E_CPUS:-$(docker_e2e_default_cpus)}"
     local pids_limit="${OPENCLAW_DOCKER_E2E_PIDS_LIMIT:-2048}"
 
     if ! docker_e2e_resource_value_disabled "$memory" && ! docker_e2e_run_arg_present --memory "$@"; then

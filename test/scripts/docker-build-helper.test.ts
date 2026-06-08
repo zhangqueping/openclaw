@@ -571,6 +571,10 @@ mktemp() {
 }
 
 docker() {
+  if [[ "$1" = "info" ]]; then
+    printf "4\\n"
+    return 0
+  fi
   printf "%s\\n" "$*" >"$TMPDIR/docker-seen"
 }
 export -f dirname grep cat rm mktemp docker
@@ -748,6 +752,10 @@ export PATH="$TMPDIR/bin"
 export DOCKER_COMMAND_TIMEOUT=7s
 
 docker() {
+  if [[ "$1" = "info" ]]; then
+    printf "4\\n"
+    return 0
+  fi
   printf "%s\\n" "$*" >"$TMPDIR/docker-seen"
 }
 export -f docker
@@ -783,7 +791,7 @@ stderr="$(<"$TMPDIR/stderr")"
       );
       writeFileSync(
         join(binDir, "docker"),
-        `#!/bin/bash\ninput="$(/bin/cat)"\nprintf "%s|%s\\n" "$*" "$input" >"$TMPDIR/docker-seen"\nexit 13\n`,
+        `#!/bin/bash\nif [[ "$1" = "info" ]]; then\n  printf "4\\n"\n  exit 0\nfi\ninput="$(/bin/cat)"\nprintf "%s|%s\\n" "$*" "$input" >"$TMPDIR/docker-seen"\nexit 13\n`,
       );
       chmodSync(join(binDir, "node"), 0o755);
       chmodSync(join(binDir, "docker"), 0o755);
@@ -808,7 +816,7 @@ set -e
 stderr="$(<"$TMPDIR/stderr")"
 [[ "$status" = "13" ]]
 [[ "$stderr" = *"timeout command not found; using Node watchdog for Docker command timeout 7s"* ]]
-[[ "$(<"$TMPDIR/docker-seen")" = "run --memory 8g --cpus 16 --pids-limit 2048 -i demo|payload" ]]
+[[ "$(<"$TMPDIR/docker-seen")" = "run --memory 8g --cpus 4 --pids-limit 2048 -i demo|payload" ]]
 `;
 
       execFileSync("bash", ["-lc", script], { encoding: "utf8" });
@@ -846,6 +854,10 @@ unset OPENCLAW_DOCKER_E2E_DISABLE_RESOURCE_LIMITS
 unset OPENCLAW_DOCKER_E2E_MEMORY OPENCLAW_DOCKER_E2E_CPUS OPENCLAW_DOCKER_E2E_PIDS_LIMIT
 
 docker() {
+  if [[ "$1" = "info" ]]; then
+    printf "4\\n"
+    return 0
+  fi
   printf "%s\\n" "$*" >>"$TMPDIR/docker-seen"
 }
 export -f docker
@@ -857,7 +869,7 @@ OPENCLAW_DOCKER_E2E_MEMORY=12g OPENCLAW_DOCKER_E2E_CPUS=4 OPENCLAW_DOCKER_E2E_PI
 docker_e2e_docker_cmd run --memory 2g --cpus 3 --pids-limit 99 demo
 OPENCLAW_DOCKER_E2E_DISABLE_RESOURCE_LIMITS=1 docker_e2e_docker_cmd run demo
 
-[[ "$(sed -n '1p' "$TMPDIR/docker-seen")" = "run --memory 8g --cpus 16 --pids-limit 2048 demo" ]]
+[[ "$(sed -n '1p' "$TMPDIR/docker-seen")" = "run --memory 8g --cpus 4 --pids-limit 2048 demo" ]]
 [[ "$(sed -n '2p' "$TMPDIR/docker-seen")" = "run --memory 12g --cpus 4 --pids-limit 512 demo" ]]
 [[ "$(sed -n '3p' "$TMPDIR/docker-seen")" = "run --memory 2g --cpus 3 --pids-limit 99 demo" ]]
 [[ "$(sed -n '4p' "$TMPDIR/docker-seen")" = "run demo" ]]
@@ -886,6 +898,10 @@ OPENCLAW_DOCKER_E2E_DISABLE_RESOURCE_LIMITS=1 docker_e2e_docker_cmd run demo
         writeFileSync(
           join(binDir, "docker"),
           `#!/bin/bash
+if [[ "$1" = "info" ]]; then
+  printf "4\\n"
+  exit 0
+fi
 printf "%s\\n" "$$" >"$TMPDIR/docker-pid"
 printf "%s\\n" "$PPID" >"$TMPDIR/watchdog-pid"
 trap "" TERM HUP
@@ -965,6 +981,10 @@ export PATH="$TMPDIR/bin:$PATH"
 export DOCKER_COMMAND_TIMEOUT=9s
 
 docker() {
+  if [[ "$1" = "info" ]]; then
+    printf "4\\n"
+    return 0
+  fi
   printf "%s\\n" "$*" >>"$TMPDIR/docker-seen"
 }
 export -f docker
@@ -1014,6 +1034,10 @@ unset OPENCLAW_DOCKER_E2E_DISABLE_RESOURCE_LIMITS
 unset OPENCLAW_DOCKER_E2E_MEMORY OPENCLAW_DOCKER_E2E_CPUS OPENCLAW_DOCKER_E2E_PIDS_LIMIT
 
 docker() {
+  if [[ "$1" = "info" ]]; then
+    printf "4\\n"
+    return 0
+  fi
   printf "%s\\n" "$*" >>"$TMPDIR/docker-seen"
 }
 export -f docker
@@ -1022,8 +1046,8 @@ source "$ROOT_DIR/scripts/lib/docker-e2e-container.sh"
 
 docker_e2e_docker_run_cmd run demo
 
-[[ "$(<"$TMPDIR/timeout-seen")" = "gtimeout:--kill-after=30s 13s|docker run --memory 8g --cpus 16 --pids-limit 2048 demo" ]]
-[[ "$(<"$TMPDIR/docker-seen")" = "run --memory 8g --cpus 16 --pids-limit 2048 demo" ]]
+[[ "$(<"$TMPDIR/timeout-seen")" = "gtimeout:--kill-after=30s 13s|docker run --memory 8g --cpus 4 --pids-limit 2048 demo" ]]
+[[ "$(<"$TMPDIR/docker-seen")" = "run --memory 8g --cpus 4 --pids-limit 2048 demo" ]]
 `;
 
       execFileSync("bash", ["-lc", script], { encoding: "utf8" });
@@ -1055,6 +1079,10 @@ docker_e2e_docker_cmd() {
 }
 
 docker() {
+  if [[ "$1" = "info" ]]; then
+    printf "4\\n"
+    return 0
+  fi
   printf "%s\\n" "$*" >"$TMPDIR/docker-seen"
 }
 export -f docker_e2e_docker_cmd docker
@@ -1117,6 +1145,10 @@ docker_e2e_docker_cmd() {
 }
 
 docker() {
+  if [[ "$1" = "info" ]]; then
+    printf "4\\n"
+    return 0
+  fi
   printf "%s\\n" "$*" >>"$TMPDIR/docker-seen"
 }
 export -f docker_e2e_docker_cmd docker
@@ -1125,8 +1157,8 @@ source "$ROOT_DIR/scripts/lib/docker-e2e-package.sh"
 
 docker_e2e_docker_run_cmd run demo
 
-[[ "$(<"$TMPDIR/timeout-seen")" = "gtimeout:--kill-after=30s 15s|docker run --memory 8g --cpus 16 --pids-limit 2048 demo" ]]
-[[ "$(<"$TMPDIR/docker-seen")" = "run --memory 8g --cpus 16 --pids-limit 2048 demo" ]]
+[[ "$(<"$TMPDIR/timeout-seen")" = "gtimeout:--kill-after=30s 15s|docker run --memory 8g --cpus 4 --pids-limit 2048 demo" ]]
+[[ "$(<"$TMPDIR/docker-seen")" = "run --memory 8g --cpus 4 --pids-limit 2048 demo" ]]
 `;
 
       execFileSync("bash", ["-lc", script], { encoding: "utf8" });
@@ -1348,6 +1380,10 @@ export -f node
 source "$ROOT_DIR/scripts/lib/docker-e2e-package.sh"
 
 docker() {
+  if [[ "$1" = "info" ]]; then
+    printf "4\\n"
+    return 0
+  fi
   if [[ "$1" == "rm" ]]; then
     shift
     test "$1" = "-f"
@@ -1881,6 +1917,10 @@ docker_e2e_docker_cmd() {
 }
 
 docker() {
+  if [[ "$1" = "info" ]]; then
+    printf "4\\n"
+    return 0
+  fi
   printf "%s\\n" "$*" >"$TMPDIR/docker-run-seen"
 }
 export -f docker
@@ -1933,6 +1973,10 @@ export PATH="$TMPDIR/bin:$PATH"
 source "$ROOT_DIR/scripts/lib/docker-e2e-package.sh"
 
 docker() {
+  if [[ "$1" = "info" ]]; then
+    printf "4\\n"
+    return 0
+  fi
   if [[ "$1" == "rm" ]]; then
     return 0
   fi
@@ -2211,6 +2255,10 @@ export PATH="$TMPDIR/bin:$PATH"
 source "$ROOT_DIR/scripts/lib/docker-e2e-package.sh"
 
 docker() {
+  if [[ "$1" = "info" ]]; then
+    printf "4\\n"
+    return 0
+  fi
   if [[ "$1" == "rm" ]]; then
     shift
     test "$1" = "-f"

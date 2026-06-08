@@ -247,6 +247,20 @@ openclaw_live_resource_value_disabled() {
   return 1
 }
 
+openclaw_live_default_cpus() {
+  local fallback="${OPENCLAW_LIVE_DOCKER_DEFAULT_CPUS:-${OPENCLAW_DOCKER_E2E_DEFAULT_CPUS:-16}}"
+  local host_cpus=""
+  if command -v docker >/dev/null 2>&1; then
+    host_cpus="$(docker info --format '{{.NCPU}}' 2>/dev/null || true)"
+    host_cpus="${host_cpus//[^0-9]/}"
+  fi
+  if [[ "$fallback" =~ ^[0-9]+$ ]] && [[ "$host_cpus" =~ ^[0-9]+$ ]] && [ "$host_cpus" -gt 0 ] && [ "$host_cpus" -lt "$fallback" ]; then
+    printf '%s\n' "$host_cpus"
+    return
+  fi
+  printf '%s\n' "$fallback"
+}
+
 openclaw_live_docker_run_resource_args() {
   local target_array="${1:?target array required}"
   eval "${target_array}=()"
@@ -255,7 +269,7 @@ openclaw_live_docker_run_resource_args() {
   fi
 
   local memory="${OPENCLAW_LIVE_DOCKER_MEMORY:-${OPENCLAW_DOCKER_E2E_MEMORY:-8g}}"
-  local cpus="${OPENCLAW_LIVE_DOCKER_CPUS:-${OPENCLAW_DOCKER_E2E_CPUS:-16}}"
+  local cpus="${OPENCLAW_LIVE_DOCKER_CPUS:-${OPENCLAW_DOCKER_E2E_CPUS:-$(openclaw_live_default_cpus)}}"
   local pids_limit="${OPENCLAW_LIVE_DOCKER_PIDS_LIMIT:-${OPENCLAW_DOCKER_E2E_PIDS_LIMIT:-2048}}"
 
   if ! openclaw_live_resource_value_disabled "$memory"; then
