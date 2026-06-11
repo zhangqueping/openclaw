@@ -10,6 +10,8 @@
  * Zero external dependencies.
  */
 
+import { PRIVATE_CHAT_ONLY_TEXT } from "./command-visibility.js";
+
 // ============ Types ============
 
 /** Slash command context (message metadata plus runtime state). */
@@ -175,7 +177,7 @@ export class SlashCommandRegistry {
 
     // Reject c2cOnly commands when invoked outside private chat.
     if (cmd.c2cOnly && ctx.type !== "c2c") {
-      return `💡 请在私聊中使用此指令`;
+      return PRIVATE_CHAT_ONLY_TEXT;
     }
 
     // Gate sensitive commands behind the allowFrom authorization check.

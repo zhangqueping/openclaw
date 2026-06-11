@@ -12,13 +12,12 @@
  */
 
 import type { OpenClawPluginApi, PluginCommandContext } from "openclaw/plugin-sdk/plugin-entry";
+import { PRIVATE_CHAT_ONLY_TEXT } from "../../engine/commands/command-visibility.js";
 import { getFrameworkCommands } from "../../engine/commands/slash-commands-impl.js";
 import { resolveQQBotAccount } from "../config.js";
 import { buildFrameworkSlashContext } from "./framework-context-adapter.js";
 import { parseQQBotFrom } from "./from-parser.js";
 import { dispatchFrameworkSlashResult } from "./result-dispatcher.js";
-
-const PRIVATE_CHAT_ONLY_TEXT = "💡 请在私聊中使用此指令";
 
 function isExplicitQQBotC2cFrom(from: string | undefined | null): boolean {
   const raw = (from ?? "").trim();
