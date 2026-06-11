@@ -1,6 +1,7 @@
 // Model-backed image understanding runtime for providers without a native media
 // provider hook.
 import { resolveModelAsync } from "../agents/embedded-agent-runner/model.js";
+import { resolveBundledStaticCatalogModel } from "../agents/embedded-agent-runner/model.static-catalog.js";
 import { isMinimaxVlmModel, minimaxUnderstandImage } from "../agents/minimax-vlm.js";
 import {
   getApiKeyForModel,
@@ -196,6 +197,23 @@ async function resolveImageRuntime(params: {
   const { model } = resolved;
   if (!model) {
     throw new Error(`Unknown model: ${resolvedRef.provider}/${resolvedRef.model}`);
+  }
+  if (!model.input?.includes("image")) {
+    // Inline provider configs (models.providers) can shadow the bundled
+    // catalog's input capabilities when the user does not explicitly list
+    // input: ["text","image"] for the model entry.  Check the bundled
+    // catalog for the same provider+modelId and, if the catalog row
+    // declares image support, merge it into the resolved model so the
+    // image-understanding path can proceed. (#92104)
+    const catalogModel = resolveBundledStaticCatalogModel({
+      provider: resolvedRef.provider,
+      modelId: resolvedRef.model,
+      cfg: params.cfg,
+      ...(params.workspaceDir ? { workspaceDir: params.workspaceDir } : {}),
+    });
+    if (catalogModel?.input?.includes("image")) {
+      model = { ...model, input: catalogModel.input };
+    }
   }
   if (!model.input?.includes("image")) {
     // resolveModelWithRegistry may synthesize a text-only fallback for configured
