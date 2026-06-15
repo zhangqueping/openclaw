@@ -1117,6 +1117,8 @@ export const FIELD_HELP: Record<string, string> = {
     "Fixed delay in milliseconds before retrying an overloaded provider/profile rotation (default: 0).",
   "auth.cooldowns.rateLimitedProfileRotations":
     "Maximum same-provider auth-profile rotations allowed for rate-limit errors before switching to model fallback (default: 1).",
+  "auth.cooldowns.maxSameModelRateLimitRetries":
+    "Maximum same-model rate-limit retries with progressive backoff before escalating to model fallback. Increase for providers with strict RPM windows (default: 3).",
   "agents.defaults.workspace":
     "Default workspace path exposed to agent runtime tools for filesystem context and repo-aware behavior. Set this explicitly when running from wrappers so path resolution stays deterministic.",
   "agents.defaults.skipOptionalBootstrapFiles":

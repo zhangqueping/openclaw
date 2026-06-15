@@ -645,6 +645,7 @@ export const FIELD_LABELS: Record<string, string> = {
   "auth.cooldowns.overloadedProfileRotations": "Overloaded Profile Rotations",
   "auth.cooldowns.overloadedBackoffMs": "Overloaded Backoff (ms)",
   "auth.cooldowns.rateLimitedProfileRotations": "Rate-Limited Profile Rotations",
+  "auth.cooldowns.maxSameModelRateLimitRetries": "Same-Model Rate Limit Retries",
   "agents.defaults.models": "Models",
   "agents.defaults.models.*.agentRuntime": "Default Agent Model Runtime",
   "agents.defaults.models.*.agentRuntime.id": "Default Agent Model Runtime ID",
