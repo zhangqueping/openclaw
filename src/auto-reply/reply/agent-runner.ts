@@ -2263,8 +2263,21 @@ export async function runReplyAgent(params: {
         : undefined;
       if (renderedUsageLine) {
         formatted = renderedUsageLine;
-      } else if (formatted && responseUsageMode === "full" && sessionKey) {
-        formatted = `${formatted} · session \`${sessionKey}\``;
+      } else if (formatted) {
+        // When the usage-bar template fails to render (e.g., returns "")
+        // keep the built-in formatResponseUsageLine output and append
+        // the session key for full mode.
+        if (responseUsageMode === "full" && sessionKey) {
+          formatted = `${formatted} · session \`${sessionKey}\``;
+        }
+      } else if (hasNonzeroUsage(usage)) {
+        // Last-resort fallback: when formatResponseUsageLine returns null
+        // (e.g., total-only tokens without split input/output) and the
+        // template also produced no output, emit a minimal token line.
+        formatted = formatResponseUsageLine({ usage, showCost: false });
+        if (formatted && responseUsageMode === "full" && sessionKey) {
+          formatted = `${formatted} · session \`${sessionKey}\``;
+        }
       }
       if (formatted) {
         responseUsageLine = formatted;
