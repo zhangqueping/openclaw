@@ -199,16 +199,14 @@ export async function buildCodexWorkspaceBootstrapContext(params: {
         targetWorkspaceDir: params.effectiveWorkspace,
       }),
     );
+    // Always include root MEMORY.md in the bootstrap context even when
+    // memory tools are present.  Suppressing it creates a recall trap where
+    // the agent cannot know which memory facts exist before querying a tool
+    // whose name it only learns from context that was excluded.  Memory
+    // tools remain available as a deeper-recall path alongside the bootstrap
+    // file. (#94295)
     const contextFiles = buildBootstrapContextForFiles(
-      memoryToolsAvailable
-        ? bootstrapFiles.filter(
-            (file) =>
-              !isCodexWorkspaceRootMemoryBootstrapFile({
-                file,
-                workspaceDir: params.resolvedWorkspace,
-              }),
-          )
-        : bootstrapFiles,
+      bootstrapFiles,
       {
         config: params.params.config,
         agentId: params.params.agentId ?? params.sessionAgentId,
@@ -222,7 +220,12 @@ export async function buildCodexWorkspaceBootstrapContext(params: {
       }),
     );
     const promptContextFiles = selectCodexWorkspacePromptContextFiles(contextFiles, {
-      excludeMemory: memoryToolsAvailable,
+      // Keep root MEMORY.md in the prompt context even when memory tools are
+      // available.  Memory tools remain available as an additional deeper-recall
+      // path, but suppressing the root bootstrap file creates a recall trap:
+      // the model cannot know which memory facts exist before querying a tool
+      // whose name it only learns from the context that was suppressed. (#94295)
+      excludeMemory: false,
       memoryWorkspaceDir: params.effectiveWorkspace,
     });
     const developerInstructionFiles = shouldInjectCodexOpenClawPromptContext(params.params)
