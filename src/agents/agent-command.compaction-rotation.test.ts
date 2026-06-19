@@ -144,8 +144,9 @@ vi.mock("./command/attempt-execution.runtime.js", async () => {
 });
 
 vi.mock("./command/cli-compaction.js", () => ({
-  runCliTurnCompactionLifecycle: async (params: { sessionEntry?: SessionEntry }) =>
-    params.sessionEntry,
+  runCliTurnCompactionLifecycle: vi.fn(
+    async (params: { sessionEntry?: SessionEntry }) => params.sessionEntry,
+  ),
 }));
 
 vi.mock("./command/delivery.runtime.js", () => ({
@@ -408,5 +409,79 @@ describe("agentCommand compaction transcript rotation", () => {
       sessionId: "rotated-session",
       sessionFile: rotatedSessionFile,
     });
+  });
+
+  // FIX #94688: Post-turn CLI compaction failure must not discard an
+  // already-successfully-generated assistant reply.
+  it("delivers assistant reply when post-turn CLI compaction fails", async () => {
+    const storePath = requireStorePath();
+    const sessionsDir = await fs.realpath(path.dirname(storePath));
+    const sessionFile = path.join(sessionsDir, "compaction-fail-post-turn.jsonl");
+
+    // Pre-create a valid session file so transcript persistence succeeds.
+    await fs.writeFile(
+      sessionFile,
+      `${JSON.stringify({
+        type: "session",
+        version: CURRENT_SESSION_VERSION,
+        id: "compaction-fail-post-turn",
+        timestamp: new Date(0).toISOString(),
+        cwd: state.workspaceDir,
+      })}\n`,
+      "utf-8",
+    );
+
+    const sessionKey = "agent:main:explicit:compaction-fail-post-turn";
+    await saveSessionStore(storePath, {
+      [sessionKey]: {
+        contextTokens: 128000,
+        sessionId: "compaction-fail-post-turn",
+        sessionFile,
+        updatedAt: Date.now(),
+        sessionStartedAt: Date.now(),
+      },
+    });
+
+    // Make runCliTurnCompactionLifecycle throw a connection error,
+    // simulating the exact scenario described in #94688.
+    const cliCompaction = await import("./command/cli-compaction.js");
+    const compactionError = new Error("Summarization failed: Connection error");
+    vi.mocked(cliCompaction.runCliTurnCompactionLifecycle).mockRejectedValueOnce(compactionError);
+
+    // Mock a successful assistant reply via CLI runner.
+    state.runAgentAttemptMock.mockResolvedValueOnce({
+      payloads: [{ text: "Here is the assistant reply" }],
+      meta: {
+        durationMs: 100,
+        stopReason: "end_turn",
+        executionTrace: {
+          runner: "cli" as const,
+          fallbackUsed: false,
+          winnerProvider: "openai",
+          winnerModel: "gpt-5.4",
+        },
+        finalAssistantVisibleText: "Here is the assistant reply",
+        agentMeta: {
+          sessionId: "compaction-fail-post-turn",
+          provider: "openai",
+          model: "gpt-5.4",
+        },
+      },
+    });
+
+    // The command must NOT throw — the already-generated reply must survive
+    // the post-turn compaction failure. It should complete normally even
+    // though compaction threw an error.
+    await expect(
+      agentCommand({
+        message: "test prompt for compaction failure",
+        sessionId: "compaction-fail-post-turn",
+        cwd: state.workspaceDir,
+      }),
+    ).resolves.toMatchObject({ deliverySucceeded: true });
+
+    // Restore the compaction mock to its default passthrough behavior
+    // for subsequent tests.
+    vi.mocked(cliCompaction.runCliTurnCompactionLifecycle).mockReset();
   });
 });
