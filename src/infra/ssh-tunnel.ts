@@ -119,7 +119,10 @@ export async function startSshPortForward(opts: {
 
   let localPort = opts.localPortPreferred;
   try {
-    await ensurePortAvailable(localPort);
+    // FIX #94596: Pass parsed.host so ensurePortAvailable checks the correct
+    // address family (IPv4 vs IPv6) instead of defaulting to "localhost" which
+    // can miss IPv4-only occupants on dual-stack hosts.
+    await ensurePortAvailable(localPort, parsed.host);
   } catch (err) {
     if (isErrno(err) && err.code === "EADDRINUSE") {
       localPort = await pickEphemeralPort();
