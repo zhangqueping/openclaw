@@ -85,6 +85,37 @@ function moveDefinedField(params: {
   return true;
 }
 
+/**
+ * Trim leading/trailing whitespace from object keys in-place.
+ *
+ * Some local tool-call parsers (observed with qwen35b via llamacpp) emit JSON
+ * with whitespace-padded key names (e.g. `"schedule "` instead of `"schedule"`).
+ * Trim those keys early so downstream repair and canonicalization helpers see
+ * the expected canonical names.  The gateway uses strict `additionalProperties:
+ * false` schemas, so unpadded keys would be rejected before persistence.
+ */
+function trimWhitespacePaddedCronKeys(value: Record<string, unknown>): void {
+  const entries = Object.entries(value);
+  let changed = false;
+  const clean: Array<[string, unknown]> = [];
+  for (const [key, entry] of entries) {
+    const trimmed = key.trim();
+    if (trimmed !== key) {
+      changed = true;
+    }
+    clean.push([trimmed, entry]);
+  }
+  if (!changed) {
+    return;
+  }
+  for (const key of Object.keys(value)) {
+    delete value[key];
+  }
+  for (const [key, entry] of clean) {
+    value[key] = entry;
+  }
+}
+
 function repairConcatenatedCronToolKeys(value: Record<string, unknown>): void {
   // Some small/local tool-call parsers can return valid JSON with adjacent cron
   // key names merged. Recover only the observed schema-specific pairs before
@@ -249,6 +280,9 @@ export function canonicalizeCronToolObject(
 ): Record<string, unknown> {
   const unwrapped = isRecord(value.data) ? value.data : isRecord(value.job) ? value.job : value;
   const next = { ...unwrapped };
+  // Normalize whitespace-padded key names before repair so downstream helpers
+  // operate on the canonical form (e.g. "schedule " → "schedule").
+  trimWhitespacePaddedCronKeys(next);
   repairConcatenatedCronToolKeys(next);
   canonicalizeCronToolSchedule(next);
   canonicalizeCronToolPayload(next);
