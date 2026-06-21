@@ -1,5 +1,6 @@
 // Coverage for deciding when embedded run results should trigger model fallback.
 import { describe, expect, it } from "vitest";
+import { GENERIC_EXTERNAL_RUN_FAILURE_TEXT } from "../../auto-reply/reply/agent-runner-failure-copy.js";
 import { classifyEmbeddedAgentRunResultForModelFallback } from "./result-fallback-classifier.js";
 
 describe("classifyEmbeddedAgentRunResultForModelFallback", () => {
@@ -254,6 +255,52 @@ describe("classifyEmbeddedAgentRunResultForModelFallback", () => {
             fallbackSafe: true,
           },
         },
+      },
+    });
+
+    expect(result).toBeNull();
+  });
+
+  it("classifies generic external runner failure text as fallback-worthy format error", () => {
+    const result = classifyEmbeddedAgentRunResultForModelFallback({
+      provider: "claude-cli",
+      model: "claude-sonnet-4-6",
+      result: {
+        payloads: [{ text: GENERIC_EXTERNAL_RUN_FAILURE_TEXT }],
+        meta: { durationMs: 42 },
+      },
+    });
+
+    expect(result).toEqual({
+      message: "claude-cli/claude-sonnet-4-6 ended with an external runner failure",
+      reason: "format",
+      code: "external_runner_failure",
+    });
+  });
+
+  it("does not classify generic failure text when mixed with other visible payloads", () => {
+    const result = classifyEmbeddedAgentRunResultForModelFallback({
+      provider: "claude-cli",
+      model: "claude-sonnet-4-6",
+      result: {
+        payloads: [
+          { text: GENERIC_EXTERNAL_RUN_FAILURE_TEXT },
+          { text: "Here is a real response" },
+        ],
+        meta: { durationMs: 42 },
+      },
+    });
+
+    expect(result).toBeNull();
+  });
+
+  it("does not trigger fallback for normal visible text that is not generic failure", () => {
+    const result = classifyEmbeddedAgentRunResultForModelFallback({
+      provider: "openai",
+      model: "gpt-5.5",
+      result: {
+        payloads: [{ text: "Here is your answer." }],
+        meta: { durationMs: 42 },
       },
     });
 

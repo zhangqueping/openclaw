@@ -1,6 +1,7 @@
 /**
  * Classifies embedded-agent run results for model fallback decisions.
  */
+import { isGenericExternalRunFailureText } from "../../auto-reply/reply/agent-runner-failure-copy.js";
 import { isSilentReplyPayloadText } from "../../auto-reply/tokens.js";
 import { classifyFailoverReason } from "../embedded-agent-helpers/errors.js";
 import type { FailoverReason } from "../embedded-agent-helpers/types.js";
@@ -122,6 +123,28 @@ function classifyBusinessDenialErrorPayloadReason(
   }
 }
 
+/** Returns the sole visible text from non-error, non-reasoning payloads when there is exactly one. */
+function getSoleVisibleNonErrorPayloadText(result: EmbeddedAgentRunResult): string | undefined {
+  const payloads = result.payloads;
+  if (!Array.isArray(payloads)) {
+    return undefined;
+  }
+  const visibleTexts: string[] = [];
+  for (const payload of payloads) {
+    if (!payload || typeof payload !== "object") {
+      continue;
+    }
+    const record = payload as Record<string, unknown>;
+    if (record.isError === true || record.isReasoning === true) {
+      continue;
+    }
+    if (typeof record.text === "string" && record.text.trim().length > 0) {
+      visibleTexts.push(record.text.trim());
+    }
+  }
+  return visibleTexts.length === 1 ? visibleTexts[0] : undefined;
+}
+
 /** Returns a fallback classification when an embedded run failed without user-visible output. */
 export function classifyEmbeddedAgentRunResultForModelFallback(params: {
   provider: string;
@@ -132,6 +155,17 @@ export function classifyEmbeddedAgentRunResultForModelFallback(params: {
 }): ModelFallbackResultClassification {
   if (!isEmbeddedAgentRunResult(params.result)) {
     return null;
+  }
+  // Detect when the sole visible payload text is the generic external runner failure
+  // text (e.g., claude-cli out-of-credits). This must be classified before the
+  // visible-payload short-circuit below so the configured fallback chain can advance.
+  const soleVisibleText = getSoleVisibleNonErrorPayloadText(params.result);
+  if (soleVisibleText && isGenericExternalRunFailureText(soleVisibleText)) {
+    return {
+      message: `${params.provider}/${params.model} ended with an external runner failure`,
+      reason: "format",
+      code: "external_runner_failure",
+    };
   }
   if (
     params.result.meta.aborted ||
