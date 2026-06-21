@@ -22,10 +22,10 @@ const ABORT_TIMEOUT_RE = /request was aborted|request aborted/i;
 const MAX_FAILOVER_CAUSE_DEPTH = 25;
 
 /**
- * Pattern matching the Codex MISSING_TOOL_RESULT_ERROR constant in
- * extensions/codex/src/app-server/event-projector.ts. Local native tool
- * execution failures (hung/reaped bash calls) must not trigger cross-provider
- * model fallback — no other model can fix a local command. See #95474.
+ * Pattern matching the Codex harness MISSING_TOOL_RESULT_ERROR constant
+ * (synthesized missing tool results for hung native tool calls). Local native
+ * tool execution failures must not trigger cross-provider model fallback —
+ * no other model can fix a local command. See #95474.
  */
 const MISSING_NATIVE_TOOL_RESULT_RE =
   /recorded a native Codex tool\.call without a matching tool\.result/;
