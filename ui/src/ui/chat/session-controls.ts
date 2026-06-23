@@ -8,7 +8,10 @@ import {
   scopedAgentParamsForSession,
 } from "../app-chat.ts";
 import type { AppViewState } from "../app-view-state.ts";
-import { createChatModelOverride } from "../chat-model-ref.ts";
+import {
+  createChatModelOverride,
+  resolvePreferredServerChatModelValue,
+} from "../chat-model-ref.ts";
 import {
   resolveChatModelOverrideValue,
   resolveChatModelSelectState,
@@ -42,7 +45,7 @@ import {
   normalizeThinkLevel,
   resolveThinkingDefaultForModel,
 } from "../thinking.ts";
-import type { FastMode, GatewayThinkingLevelOption, SessionsListResult } from "../types.ts";
+import type { FastMode, GatewayThinkingLevelOption, SessionsListResult, SessionsPatchResult } from "../types.ts";
 
 type ChatSessionSwitchHandler = (state: AppViewState, nextSessionKey: string) => void;
 type ChatSessionSelectSurface = "desktop" | "mobile" | "sidebar";
@@ -1388,11 +1391,45 @@ async function switchChatModel(state: AppViewState, nextModel: string): Promise<
   };
   const switchPromise: Promise<boolean> = (async () => {
     try {
-      await client.request("sessions.patch", {
+      const patched = await client.request<SessionsPatchResult>("sessions.patch", {
         key: targetSessionKey,
         ...scopedAgentParamsForSession(state, targetSessionKey),
         model: nextModel || null,
       });
+      /* Reconcile the cached override with the server-resolved model so the
+      picker shows the effective runtime model, not only the requested value.
+      The server can silently fall back to a different provider (e.g. when the
+      requested provider is unreachable or unauthenticated).
+      Only reconcile explicit (non-empty) selections — when the user picked
+      Default the immediate cache entry is null and must stay null so the
+      selector keeps following the current default model. */
+      if (nextModel) {
+        let resolvedModel = nextModel;
+        let resolvedProvider = "";
+        if (patched.resolved) {
+          if (typeof patched.resolved.model === "string") {
+            resolvedModel = patched.resolved.model;
+          }
+          if (typeof patched.resolved.modelProvider === "string") {
+            resolvedProvider = patched.resolved.modelProvider;
+          }
+        }
+        const resolvedValue = resolvePreferredServerChatModelValue(
+          resolvedModel,
+          resolvedProvider,
+          state.chatModelCatalog ?? [],
+        );
+        const resolvedOverride = createChatModelOverride(resolvedValue);
+        if (
+          JSON.stringify(resolvedOverride) !==
+          JSON.stringify(state.chatModelOverrides[targetSessionKey])
+        ) {
+          state.chatModelOverrides = {
+            ...state.chatModelOverrides,
+            [targetSessionKey]: resolvedOverride,
+          };
+        }
+      }
       void refreshVisibleToolsEffectiveForCurrentSessionLazy(state);
       await refreshSessionOptions(state);
       return true;
