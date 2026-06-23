@@ -22,7 +22,12 @@ import {
   isTelegramExecApprovalHandlerConfigured,
   shouldHandleTelegramExecApprovalRequest,
 } from "./exec-approvals.js";
-import { editMessageReplyMarkupTelegram, sendMessageTelegram, sendTypingTelegram } from "./send.js";
+import {
+  deleteMessageTelegram,
+  editMessageReplyMarkupTelegram,
+  sendMessageTelegram,
+  sendTypingTelegram,
+} from "./send.js";
 
 const log = createSubsystemLogger("telegram/approvals");
 
@@ -41,6 +46,7 @@ export type TelegramExecApprovalHandlerDeps = {
   sendTyping?: typeof sendTypingTelegram;
   sendMessage?: typeof sendMessageTelegram;
   editReplyMarkup?: typeof editMessageReplyMarkupTelegram;
+  deleteMessage?: typeof deleteMessageTelegram;
 };
 
 export type TelegramApprovalHandlerContext = {
@@ -129,7 +135,9 @@ export const telegramApprovalNativeRuntime = createChannelApprovalNativeRuntimeA
   presentation: {
     buildPendingPayload: ({ request, approvalKind, nowMs, view }) =>
       buildPendingPayload({ request, approvalKind, nowMs, view }),
-    buildResolvedResult: () => ({ kind: "clear-actions" }),
+    // FIX #56286: Resolved approvals should fully delete the approval bubble.
+    // Expired approvals only clear the inline keyboard (leave text in place).
+    buildResolvedResult: () => ({ kind: "delete" }),
     buildExpiredResult: () => ({ kind: "clear-actions" }),
   },
   transport: {
@@ -172,8 +180,25 @@ export const telegramApprovalNativeRuntime = createChannelApprovalNativeRuntimeA
         messageId: result.messageId,
       };
     },
+    // FIX #56286: Delete the entire approval bubble after resolution.
+    // This is used when buildResolvedResult returns { kind: "delete" }.
+    deleteEntry: async ({ cfg, accountId, context, entry }) => {
+      const resolved = resolveHandlerContext({ cfg, accountId, context });
+      if (!resolved) {
+        return;
+      }
+      const deleteMsg = resolved.context.deps?.deleteMessage ?? deleteMessageTelegram;
+      await deleteMsg(entry.chatId, entry.messageId, {
+        cfg,
+        token: resolved.context.token,
+        accountId: resolved.accountId,
+      });
+    },
   },
   interactions: {
+    // clear-actions is used for expired approvals: remove the inline keyboard
+    // so users can't interact with an expired prompt, but keep the text so
+    // the chat history still shows what was asked.
     clearPendingActions: async ({ cfg, accountId, context, entry }) => {
       const resolved = resolveHandlerContext({ cfg, accountId, context });
       if (!resolved) {

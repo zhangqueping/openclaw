@@ -119,4 +119,111 @@ describe("telegramApprovalNativeRuntime", () => {
       messageId: "m1",
     });
   });
+
+  // FIX #56286: resolved approvals return "delete" so the entire approval
+  // bubble is removed; expired approvals return "clear-actions" so only the
+  // inline keyboard is cleared.
+  it("returns delete for resolved and clear-actions for expired (regression #56286)", async () => {
+    const resolved = await telegramApprovalNativeRuntime.presentation.buildResolvedResult({
+      cfg: {} as never,
+      accountId: "default",
+      context: { token: "tg-token" },
+      request: {
+        id: "req-1",
+        request: { command: "echo hi" },
+        createdAtMs: 0,
+        expiresAtMs: 60_000,
+      },
+      resolved: { id: "req-1", decision: "allow-once", ts: 0 },
+      view: {
+        approvalKind: "exec",
+        approvalId: "req-1",
+        commandText: "echo hi",
+        actions: [],
+      } as never,
+      entry: { chatId: "-1003841603622", messageId: "m1" },
+    });
+    expect(resolved).toEqual({ kind: "delete" });
+
+    const expired = await telegramApprovalNativeRuntime.presentation.buildExpiredResult({
+      cfg: {} as never,
+      accountId: "default",
+      context: { token: "tg-token" },
+      request: {
+        id: "req-1",
+        request: { command: "echo hi" },
+        createdAtMs: 0,
+        expiresAtMs: 60_000,
+      },
+      view: {
+        approvalKind: "exec",
+        approvalId: "req-1",
+        commandText: "echo hi",
+        actions: [],
+      } as never,
+      entry: { chatId: "-1003841603622", messageId: "m1" },
+    });
+    expect(expired).toEqual({ kind: "clear-actions" });
+  });
+
+  // FIX #56286: transport.deleteEntry must delete the Telegram message
+  // when buildResolvedResult returns { kind: "delete" }.
+  it("deletes the approval message via transport.deleteEntry (regression #56286)", async () => {
+    const deleteMessage = vi.fn().mockResolvedValue({ ok: true });
+
+    const deleteEntry = telegramApprovalNativeRuntime.transport?.deleteEntry;
+    if (!deleteEntry) {
+      throw new Error("deleteEntry not implemented");
+    }
+
+    await deleteEntry({
+      cfg: {} as never,
+      accountId: "default",
+      context: {
+        token: "tg-token",
+        deps: { deleteMessage },
+      },
+      entry: { chatId: "-1003841603622", messageId: "m42" },
+      phase: "resolved",
+    } as Parameters<typeof deleteEntry>[0]);
+
+    expect(deleteMessage).toHaveBeenCalledWith("-1003841603622", "m42", {
+      cfg: {},
+      token: "tg-token",
+      accountId: "default",
+    });
+  });
+
+  // FIX #56286: For expired approvals, clearPendingActions must only clear
+  // the inline keyboard — not delete the message. The prompt text stays
+  // visible so chat history is preserved.
+  it("clears only the inline keyboard on expired, not delete (regression #56286)", async () => {
+    const editReplyMarkup = vi.fn().mockResolvedValue({
+      ok: true,
+      messageId: "m42",
+      chatId: "-1003841603622",
+    });
+
+    const clearFn = telegramApprovalNativeRuntime.interactions?.clearPendingActions;
+    if (!clearFn) {
+      throw new Error("clearPendingActions not implemented");
+    }
+
+    await clearFn({
+      cfg: {} as never,
+      accountId: "default",
+      context: {
+        token: "tg-token",
+        deps: { editReplyMarkup },
+      },
+      entry: { chatId: "-1003841603622", messageId: "m42" },
+      phase: "expired",
+    } as Parameters<typeof clearFn>[0]);
+
+    expect(editReplyMarkup).toHaveBeenCalledWith("-1003841603622", "m42", [], {
+      cfg: {},
+      token: "tg-token",
+      accountId: "default",
+    });
+  });
 });
