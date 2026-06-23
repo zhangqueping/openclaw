@@ -988,7 +988,7 @@ describe("stuck session diagnostics threshold", () => {
     );
   });
 
-  it("does not recover stale model calls without active embedded-run ownership", async () => {
+  it("recovers stalled model calls in non-embedded sessions (e.g. CLI harness)", async () => {
     const events: DiagnosticEventPayload[] = [];
     const recoverStuckSession = vi.fn();
     const stuckSessionWarnMs = 30_000;
@@ -1008,6 +1008,8 @@ describe("stuck session diagnostics threshold", () => {
         { recoverStuckSession },
       );
       logSessionStateChange({ sessionId: "s1", sessionKey: "main", state: "processing" });
+      // Only record a model call — no embedded-run marker, simulating a
+      // CLI harness session (e.g. Codex-backed provider).
       markDiagnosticModelStartedForTest({
         sessionId: "s1",
         sessionKey: "main",
@@ -1021,6 +1023,9 @@ describe("stuck session diagnostics threshold", () => {
       unsubscribe();
     }
 
+    // hasActiveModelCall is now set by activeModelCalls tracking (recordModelStarted
+    // populates it for all session types), so non-embedded sessions are classified
+    // and recovered identically to embedded ones.
     expectRecordFields(
       requireRecord(
         events.findLast((event) => event.type === "session.stalled"),
@@ -1033,7 +1038,7 @@ describe("stuck session diagnostics threshold", () => {
         lastProgressReason: "model_call:started",
       },
     );
-    expect(recoverStuckSession).not.toHaveBeenCalled();
+    expect(recoverStuckSession).toHaveBeenCalled();
   });
 
   it("does not recover a recent native tool call just because the session is old", async () => {
@@ -2402,7 +2407,7 @@ describe("stuck session diagnostics threshold", () => {
         30_000,
       ),
     ).toBe(48 * 60 * 60_000);
-    expect(resolveStuckSessionAbortMs(undefined, 30_000)).toBe(5 * 60_000);
+    expect(resolveStuckSessionAbortMs(undefined, 30_000)).toBe(3 * 60_000);
   });
 });
 

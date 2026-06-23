@@ -58,6 +58,7 @@ type DiagnosticRunProgressActivityEvent = Pick<
 export type DiagnosticSessionActivitySnapshot = {
   activeWorkKind?: DiagnosticSessionActiveWorkKind;
   hasActiveEmbeddedRun?: boolean;
+  hasActiveModelCall?: boolean;
   activeToolName?: string;
   activeToolCallId?: string;
   activeToolAgeMs?: number;
@@ -596,6 +597,7 @@ export function getDiagnosticSessionActivitySnapshot(
   return {
     activeWorkKind,
     ...(activity.activeEmbeddedRuns.size > 0 ? { hasActiveEmbeddedRun: true } : {}),
+    ...(activity.activeModelCalls.size > 0 ? { hasActiveModelCall: true } : {}),
     activeToolName: activeTool?.toolName,
     activeToolCallId: activeTool?.toolCallId,
     activeToolAgeMs: activeTool ? Math.max(0, now - activeTool.startedAt) : undefined,

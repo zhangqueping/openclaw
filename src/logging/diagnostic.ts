@@ -77,8 +77,11 @@ const webhookStats = {
 const DEFAULT_STUCK_SESSION_WARN_MS = 120_000;
 const MIN_STUCK_SESSION_WARN_MS = 1_000;
 const MAX_STUCK_SESSION_WARN_MS = 24 * 60 * 60 * 1000;
-const MIN_STALLED_EMBEDDED_RUN_ABORT_MS = 5 * 60_000;
-const STALLED_EMBEDDED_RUN_ABORT_WARN_MULTIPLIER = 3;
+// FIX #94650: Lower stalled-run abort floor so stuck model calls are killed
+// sooner. 300 s (5 min) left sessions blocked far longer than users tolerate.
+// 180 s gives runners enough time for retries while still cutting off hangs.
+const MIN_STALLED_EMBEDDED_RUN_ABORT_MS = 3 * 60_000;
+const STALLED_EMBEDDED_RUN_ABORT_WARN_MULTIPLIER = 2;
 const RECENT_DIAGNOSTIC_ACTIVITY_MS = 120_000;
 const DEFAULT_LIVENESS_EVENT_LOOP_DELAY_WARN_MS = 1_000;
 const DEFAULT_LIVENESS_EVENT_LOOP_UTILIZATION_WARN = 0.95;
@@ -540,11 +543,16 @@ function isStalledModelCallRecoveryEligible(params: {
   // Local providers are not blanket-exempt from recovery. Streaming model
   // chunks refresh run activity while emitted progress events are throttled, so
   // active streams stay fresh and silent/non-streaming calls can be recovered.
+  //
+  // hasActiveModelCall gates on the activity snapshot so that both embedded-run
+  // and CLI-harness sessions (e.g. Codex-backed providers) are eligible.
+  // activeModelCalls is tracked by recordModelStarted which fires for every
+  // session type.
   return (
     params.classification?.eventType === "session.stalled" &&
     params.classification.classification === "stalled_agent_run" &&
     params.classification.activeWorkKind === "model_call" &&
-    params.activity?.hasActiveEmbeddedRun === true &&
+    params.activity?.hasActiveModelCall === true &&
     typeof lastProgressAgeMs === "number" &&
     lastProgressAgeMs >= params.stuckSessionAbortMs
   );

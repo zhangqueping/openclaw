@@ -77,7 +77,7 @@ describe("classifySessionAttention", () => {
       queueDepth: 0,
       activity: {
         activeWorkKind: "model_call" as const,
-        hasActiveEmbeddedRun: true,
+        hasActiveModelCall: true,
         lastProgressAgeMs: 31_000,
       },
       expected: {
@@ -93,7 +93,7 @@ describe("classifySessionAttention", () => {
       queueDepth: 0,
       activity: {
         activeWorkKind: "model_call" as const,
-        hasActiveEmbeddedRun: true,
+        hasActiveModelCall: true,
         lastProgressAgeMs: 60_000,
       },
       expected: {
@@ -127,6 +127,7 @@ describe("classifySessionAttention", () => {
       activity: {
         activeWorkKind: "model_call" as const,
         hasActiveEmbeddedRun: false,
+        hasActiveModelCall: true,
         lastProgressAgeMs: 31_000,
         lastProgressReason: "model_call:started",
       },
@@ -156,18 +157,19 @@ describe("classifySessionAttention", () => {
       },
     },
     {
-      name: "processing session with orphaned activity is not recoverable",
+      name: "processing session with orphaned model activity is not recoverable",
       state: "processing" as const,
       queueDepth: 1,
       activity: {
         activeWorkKind: "model_call" as const,
         hasActiveEmbeddedRun: false,
+        hasActiveModelCall: true,
         lastProgressAgeMs: 31_000,
       },
       expected: {
-        eventType: "session.stalled",
-        reason: "active_work_without_progress",
-        classification: "stalled_agent_run",
+        eventType: "session.long_running",
+        reason: "active_model_call_without_progress",
+        classification: "long_running",
         activeWorkKind: "model_call",
         recoveryEligible: false,
       },
