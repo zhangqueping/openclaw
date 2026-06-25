@@ -1475,7 +1475,12 @@ export function createFollowupRunner(params: {
           allowPluginNormalization: false,
         });
         const showCost = responseUsageMode === "full" && costConfig !== undefined;
-        const formatted = formatResponseUsageLine({ usage, showCost, costConfig });
+        let formatted = formatResponseUsageLine({ usage, showCost, costConfig });
+        if (formatted && responseUsageMode === "full" && replySessionKey) {
+          // Match agent-runner pattern: append session key suffix for /usage full
+          // so the footer includes context about which session the usage is for.
+          formatted = `${formatted} · session \`${replySessionKey}\``;
+        }
         if (formatted) {
           deliveryPayloads = appendUsageLine(deliveryPayloads, formatted);
         } else if (replySessionKey) {
