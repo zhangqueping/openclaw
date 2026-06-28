@@ -1,5 +1,6 @@
 /** Heartbeat prompt defaults, token stripping, task parsing, and due-time helpers. */
 import { normalizeOptionalString } from "@openclaw/normalization-core/string-coerce";
+import { STREAM_ERROR_FALLBACK_TEXT } from "../agents/stream-message-shared.js";
 import { parseDurationMs } from "../cli/parse-duration.js";
 import { escapeRegExp } from "../shared/regexp.js";
 import { HEARTBEAT_TOKEN } from "./tokens.js";
@@ -245,6 +246,27 @@ export function stripHeartbeatToken(
   }
 
   return { shouldSkip: false, text: rest, didStrip: true };
+}
+
+const STREAM_ERROR_FALLBACK_ONLY_RE = new RegExp(
+  `^\\s*(${escapeRegExp(STREAM_ERROR_FALLBACK_TEXT)}\\s*)+$`,
+);
+
+/**
+ * Returns true when the text consists entirely of one or more repetitions of
+ * the stream-error fallback sentinel, ignoring whitespace separators.
+ *
+ * The sentinel (`STREAM_ERROR_FALLBACK_TEXT`) is placed in session transcripts
+ * for assistant turns that fail before producing model content (Bedrock replay
+ * safety). A fallback model can echo it as its own reply, and the heartbeat
+ * delivery path must suppress that to avoid sending the placeholder as a
+ * visible user message. See #97357.
+ */
+export function isStreamErrorFallbackOnlyText(text: string | undefined): boolean {
+  if (!text?.trim()) {
+    return false;
+  }
+  return STREAM_ERROR_FALLBACK_ONLY_RE.test(text);
 }
 
 /**

@@ -36,6 +36,7 @@ import {
 import {
   DEFAULT_HEARTBEAT_ACK_MAX_CHARS,
   isHeartbeatContentEffectivelyEmpty,
+  isStreamErrorFallbackOnlyText,
   isTaskDue,
   parseHeartbeatTasks,
   resolveHeartbeatPrompt as resolveHeartbeatPromptText,
@@ -1950,6 +1951,15 @@ export async function runHeartbeatOnce(opts: {
     if (deliveredAgentRunFailure) {
       normalized.text = replacement.text;
       normalized.shouldSkip = false;
+    }
+    // Suppress stream-error fallback placeholders that leaked through from a
+    // prior failed heartbeat turn. The sentinel must stay in the session file
+    // for replay safety, but delivering it as a visible user message is
+    // confusing noise. See #97357.
+    if (!heartbeatToolResponse && !deliveredAgentRunFailure) {
+      if (isStreamErrorFallbackOnlyText(normalized.text)) {
+        normalized.shouldSkip = true;
+      }
     }
     const shouldSkipMain =
       normalized.shouldSkip && !normalized.hasMedia && !hasRelayableExecCompletion;

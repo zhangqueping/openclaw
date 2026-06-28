@@ -1,9 +1,11 @@
 /** Tests heartbeat prompt, token, task parsing, and due-time helpers. */
 import { describe, expect, it } from "vitest";
+import { STREAM_ERROR_FALLBACK_TEXT } from "../agents/stream-message-shared.js";
 import {
   DEFAULT_HEARTBEAT_ACK_MAX_CHARS,
   HEARTBEAT_RESPONSE_TOOL_PROMPT,
   isHeartbeatContentEffectivelyEmpty,
+  isStreamErrorFallbackOnlyText,
   parseHeartbeatTasks,
   resolveHeartbeatPromptForResponseTool,
   stripHeartbeatToken,
@@ -163,6 +165,62 @@ describe("stripHeartbeatToken", () => {
       text: "All clear.",
       didStrip: true,
     });
+  });
+});
+
+describe("isStreamErrorFallbackOnlyText", () => {
+  it("returns true for a single sentinel instance", () => {
+    expect(isStreamErrorFallbackOnlyText(STREAM_ERROR_FALLBACK_TEXT)).toBe(true);
+  });
+
+  it("returns true for a single sentinel with surrounding whitespace", () => {
+    expect(isStreamErrorFallbackOnlyText(`  ${STREAM_ERROR_FALLBACK_TEXT}  `)).toBe(true);
+  });
+
+  it("returns true for multiple repetitions separated by newlines", () => {
+    const repeated = `${STREAM_ERROR_FALLBACK_TEXT}\n${STREAM_ERROR_FALLBACK_TEXT}`;
+    expect(isStreamErrorFallbackOnlyText(repeated)).toBe(true);
+  });
+
+  it("returns true for many repetitions (43 — the observed case)", () => {
+    const repeated = Array.from({ length: 43 }, () => STREAM_ERROR_FALLBACK_TEXT).join("\n");
+    expect(isStreamErrorFallbackOnlyText(repeated)).toBe(true);
+  });
+
+  it("returns true for repetitions with mixed whitespace separators", () => {
+    const repeated = `${STREAM_ERROR_FALLBACK_TEXT}\n\n${STREAM_ERROR_FALLBACK_TEXT}\n  ${STREAM_ERROR_FALLBACK_TEXT}`;
+    expect(isStreamErrorFallbackOnlyText(repeated)).toBe(true);
+  });
+
+  it("returns false for undefined", () => {
+    expect(isStreamErrorFallbackOnlyText(undefined)).toBe(false);
+  });
+
+  it("returns false for empty string", () => {
+    expect(isStreamErrorFallbackOnlyText("")).toBe(false);
+  });
+
+  it("returns false for whitespace-only string", () => {
+    expect(isStreamErrorFallbackOnlyText("   ")).toBe(false);
+  });
+
+  it("returns false when mixed with substantive text", () => {
+    const mixed = `Here is an update.\n${STREAM_ERROR_FALLBACK_TEXT}`;
+    expect(isStreamErrorFallbackOnlyText(mixed)).toBe(false);
+  });
+
+  it("returns false when sentinel is embedded in larger text", () => {
+    const embedded = `The model said: ${STREAM_ERROR_FALLBACK_TEXT} and then stopped.`;
+    expect(isStreamErrorFallbackOnlyText(embedded)).toBe(false);
+  });
+
+  it("returns false when HEARTBEAT_OK is mixed in", () => {
+    const mixed = `${STREAM_ERROR_FALLBACK_TEXT} ${HEARTBEAT_TOKEN}`;
+    expect(isStreamErrorFallbackOnlyText(mixed)).toBe(false);
+  });
+
+  it("returns false when sentinel has trailing punctuation (not a pure sentinel)", () => {
+    expect(isStreamErrorFallbackOnlyText(`${STREAM_ERROR_FALLBACK_TEXT}.`)).toBe(false);
   });
 });
 
