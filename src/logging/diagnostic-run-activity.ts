@@ -58,6 +58,10 @@ type DiagnosticRunProgressActivityEvent = Pick<
 export type DiagnosticSessionActivitySnapshot = {
   activeWorkKind?: DiagnosticSessionActiveWorkKind;
   hasActiveEmbeddedRun?: boolean;
+  /** Tracked model call within an embedded agent run.  Used for
+   * model_call classification only; recovery still gates on
+   * hasActiveEmbeddedRun.  Non-embedded model calls are tracked
+   * but not classified here until #90750 cleanup lands. */
   hasActiveModelCall?: boolean;
   activeToolName?: string;
   activeToolCallId?: string;

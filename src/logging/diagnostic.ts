@@ -544,14 +544,14 @@ function isStalledModelCallRecoveryEligible(params: {
   // chunks refresh run activity while emitted progress events are throttled, so
   // active streams stay fresh and silent/non-streaming calls can be recovered.
   //
-  // hasActiveModelCall gates on the activity snapshot so that both embedded-run
-  // and CLI-harness sessions (e.g. Codex-backed providers) are eligible.
-  // activeModelCalls is tracked by recordModelStarted which fires for every
-  // session type.
+  // hasActiveModelCall gates on the activity snapshot; hasActiveEmbeddedRun
+  // ensures a live embedded-run owner exists.  CLI-harness sessions are NOT
+  // eligible until #90750 provides ownerless-marker cleanup.
   return (
     params.classification?.eventType === "session.stalled" &&
     params.classification.classification === "stalled_agent_run" &&
     params.classification.activeWorkKind === "model_call" &&
+    params.activity?.hasActiveEmbeddedRun === true &&
     params.activity?.hasActiveModelCall === true &&
     typeof lastProgressAgeMs === "number" &&
     lastProgressAgeMs >= params.stuckSessionAbortMs

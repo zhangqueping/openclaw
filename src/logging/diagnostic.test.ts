@@ -988,7 +988,7 @@ describe("stuck session diagnostics threshold", () => {
     );
   });
 
-  it("recovers stalled model calls in non-embedded sessions (e.g. CLI harness)", async () => {
+  it("classifies but does not recover stalled model calls without active embedded run (blocked on #90750)", async () => {
     const events: DiagnosticEventPayload[] = [];
     const recoverStuckSession = vi.fn();
     const stuckSessionWarnMs = 30_000;
@@ -1023,9 +1023,10 @@ describe("stuck session diagnostics threshold", () => {
       unsubscribe();
     }
 
-    // hasActiveModelCall is now set by activeModelCalls tracking (recordModelStarted
-    // populates it for all session types), so non-embedded sessions are classified
-    // and recovered identically to embedded ones.
+    // hasActiveModelCall surfaces the model call for classification, so the
+    // session is visible to diagnostics.  Active-abort recovery still requires
+    // hasActiveEmbeddedRun (live-owner signal) — CLI sessions are classified
+    // but not force-recovered until #90750 cleanup lands.
     expectRecordFields(
       requireRecord(
         events.findLast((event) => event.type === "session.stalled"),
@@ -1038,7 +1039,7 @@ describe("stuck session diagnostics threshold", () => {
         lastProgressReason: "model_call:started",
       },
     );
-    expect(recoverStuckSession).toHaveBeenCalled();
+    expect(recoverStuckSession).not.toHaveBeenCalled();
   });
 
   it("does not recover a recent native tool call just because the session is old", async () => {
