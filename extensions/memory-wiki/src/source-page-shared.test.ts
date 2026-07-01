@@ -180,4 +180,46 @@ describe("writeImportedSourcePage", () => {
     expect(notesBlock).toContain(userNote);
     expect(notesBlock).not.toContain("OLD IMPORTED SOURCE MARKER PAYLOAD");
   });
+
+  it("preserves the human Notes block when an imported source page is re-ingested (#98345)", async () => {
+    // The retry-once logic in readExistingVaultPageText guards against
+    // transient existing-page read failures silently wiping notes.  This
+    // test verifies notes survive a normal ingest cycle (the actual
+    // transient-read path is tested in the ingest.test.ts suite where the
+    // fs/promises readFile path is directly injectable).
+    const sourcePath = path.join(suiteRoot, "source-transient.txt");
+    const pagePath = "sources/transient.md";
+    const state: Parameters<typeof writeImportedSourcePage>[0]["state"] = {
+      entries: {}, version: 1,
+    };
+
+    await fs.writeFile(sourcePath, "first content", "utf8");
+    await writeImportedSourcePage({
+      vaultRoot: suiteRoot, syncKey: "bridge:transient", sourcePath,
+      sourceUpdatedAtMs: Date.UTC(2026, 5, 1), sourceSize: 13,
+      renderFingerprint: "fp-1", pagePath, group: "bridge",
+      state, buildRendered: buildSourcePage,
+    });
+
+    const absPage = path.join(suiteRoot, pagePath);
+    const userNote = "IMPORTANT CONTEXT: do not lose this note";
+    const existingContent = await fs.readFile(absPage, "utf8");
+    const edited = existingContent.replace(
+      "<!-- openclaw:human:start -->\n<!-- openclaw:human:end -->",
+      `<!-- openclaw:human:start -->\n${userNote}\n<!-- openclaw:human:end -->`,
+    );
+    await fs.writeFile(absPage, edited, "utf8");
+
+    await fs.writeFile(sourcePath, "second content updated", "utf8");
+    await writeImportedSourcePage({
+      vaultRoot: suiteRoot, syncKey: "bridge:transient", sourcePath,
+      sourceUpdatedAtMs: Date.UTC(2026, 5, 2), sourceSize: 22,
+      renderFingerprint: "fp-2", pagePath, group: "bridge",
+      state, buildRendered: buildSourcePage,
+    });
+
+    const after = await fs.readFile(absPage, "utf8");
+    expect(after).toContain(userNote);
+    expect(after).toContain("second content updated");
+  });
 });

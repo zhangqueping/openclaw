@@ -52,7 +52,13 @@ export async function writeImportedSourcePage(params: {
 
   const raw = await fs.readFile(params.sourcePath, "utf8");
   const rendered = params.buildRendered(raw, updatedAt);
-  const existing = pageStat ? await vault.readText(params.pagePath).catch(() => "") : "";
+  // Read the existing page with a one-shot retry so a transient read failure
+  // (e.g. the fs-safe path-mismatch concurrent-rewrite race the writer defends
+  // against) does not route past preserveHumanNotesBlock and silently wipe the
+  // user's hand-written ## Notes block. (#98345)
+  const existing = pageStat
+    ? await readExistingVaultPageText(vault, params.pagePath)
+    : "";
   const nextRendered = existing ? preserveHumanNotesBlock(rendered, existing) : rendered;
   if (existing !== nextRendered) {
     await writeGuardedVaultPage({
@@ -77,4 +83,20 @@ export async function writeImportedSourcePage(params: {
     },
   });
   return { pagePath: params.pagePath, changed: existing !== nextRendered, created };
+}
+
+/** Reads a vault page with one immediate retry so a transient I/O failure
+ *  (e.g. the fs-safe path-mismatch concurrent-rewrite race the writer
+ *  retries) does not route past `preserveHumanNotesBlock` and silently wipe
+ *  the user's hand-written `## Notes` block.  (#98345) */
+async function readExistingVaultPageText(
+  vault: Awaited<ReturnType<typeof fsRoot>>,
+  pagePath: string,
+): Promise<string> {
+  try {
+    return await vault.readText(pagePath);
+  } catch {
+    await new Promise((resolve) => setTimeout(resolve, 100));
+    return await vault.readText(pagePath);
+  }
 }

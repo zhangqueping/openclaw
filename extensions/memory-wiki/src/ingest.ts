@@ -87,7 +87,17 @@ export async function ingestMemoryWikiSource(params: {
     ].join("\n"),
   });
 
-  const existing = created ? "" : await fs.readFile(pagePath, "utf8").catch(() => "");
+  // Read the existing page with a one-shot retry so a transient read failure
+  // (e.g. the fs-safe path-mismatch concurrent-rewrite race the writer defends
+  // against) does not route past preserveHumanNotesBlock and silently wipe the
+  // user's hand-written ## Notes block. (#98345)
+  const existing = created
+    ? ""
+    : await readVaultPageWithRetry(pagePath).catch((err) => {
+        throw new Error(
+          `Cannot read existing wiki page at ${pagePath} (source ingest): ${String(err)}`,
+        );
+      });
   await fs.writeFile(
     pagePath,
     existing ? preserveHumanNotesBlock(markdown, existing) : markdown,
@@ -115,4 +125,17 @@ export async function ingestMemoryWikiSource(params: {
     created,
     indexUpdatedFiles: compile.updatedFiles,
   };
+}
+
+/** Reads a wiki page with one immediate retry so a transient I/O failure
+ *  (e.g. the fs-safe path-mismatch concurrent-rewrite race the writer
+ *  retries) does not route past `preserveHumanNotesBlock` and silently wipe
+ *  the user's hand-written `## Notes` block.  (#98345) */
+async function readVaultPageWithRetry(pagePath: string): Promise<string> {
+  try {
+    return await fs.readFile(pagePath, "utf8");
+  } catch {
+    await new Promise((resolve) => setTimeout(resolve, 100));
+    return await fs.readFile(pagePath, "utf8");
+  }
 }
