@@ -583,4 +583,22 @@ describe("extractWikiLinks", () => {
     const links = extractWikiLinks(markdown, "entities/test.md");
     expect(links).toEqual(["RealTarget"]);
   });
+
+  it("does not leak [[…]] when a shorter fence-like line appears inside a longer fenced block (#97945)", () => {
+    // A 6-backtick block containing a shorter 3-backtick line before the real
+    // 6-backtick close must not cause the scanner to exit early.
+    const markdown = [
+      "# Long Fence With Shorter Inner Line",
+      "",
+      "``````bash",
+      "some code",
+      "```",
+      "[[not-a-link]]",
+      "``````",
+      "",
+      "After fence: [[RealPage]]",
+    ].join("\n");
+    const links = extractWikiLinks(markdown, "entities/test.md");
+    expect(links).toEqual(["RealPage"]);
+  });
 });

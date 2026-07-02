@@ -128,10 +128,11 @@ const MARKDOWN_LINK_PATTERN = /\[[^\]]+\]\(([^)]+)\)/g;
 // conservative: they require backtick or tilde fences and do not strip raw
 // indented-code-block regions, which virtually never contain realistic
 // accidental wikilink syntax.
-// Uses a replacement function (not a regex backreference) so a closing fence
-// that is longer than the opening fence still closes the block correctly
-// (CommonMark allows the closing fence to be the same or longer).
-const FENCED_CODE_BLOCK_RE = /(?:^|\n) {0,3}(`{3,}|~{3,})[^\n]*\n[\s\S]*?\n {0,3}(`{3,}|~{3,})(?=\n|$)/g;
+//
+// Fenced code stripping uses a line scanner so that invalid fence-looking
+// lines (e.g. a shorter `` ` `` line inside a longer ```` ``` ```` block)
+// do not prematurely end the block — the scanner keeps looking for a
+// valid closing fence of the same character type and at least as long.
 const INLINE_CODE_PATTERN = /`[^`\n]+`/g;
 const RELATED_BLOCK_PATTERN = new RegExp(
   `${WIKI_RELATED_START_MARKER}[\\s\\S]*?${WIKI_RELATED_END_MARKER}`,
@@ -419,15 +420,40 @@ function normalizeMarkdownLinkTarget(sourceRelativePath: string, target: string)
   return path.posix.normalize(path.posix.join(path.posix.dirname(sourceRelativePath), target));
 }
 
-export function extractWikiLinks(markdown: string, sourceRelativePath: string): string[] {
-  const codeMasked = markdown
-    .replace(FENCED_CODE_BLOCK_RE, (match, open, close) => {
-      if (open[0] === close[0] && close.length >= open.length) {
-        return "\n";
+/**
+ * Strip fenced code blocks line-by-line so that invalid fence-looking lines
+ * inside longer blocks (e.g. a shorter ``` line inside a ````` block) do not
+ * prematurely end the block.  Handles backtick and tilde fences and accepts a
+ * closing fence that is longer than the opening fence (CommonMark spec).
+ */
+function stripFencedCodeBlocks(markdown: string): string {
+  const lines = markdown.split("\n");
+  const out: string[] = [];
+  for (let i = 0; i < lines.length; i++) {
+    const openMatch = /^ {0,3}(`{3,}|~{3,})/.exec(lines[i]);
+    if (!openMatch) {
+      out.push(lines[i]);
+      continue;
+    }
+    const fenceChar = openMatch[1][0];
+    const fenceLen = openMatch[1].length;
+    out.push("");
+    i++;
+    while (i < lines.length) {
+      const closeMatch = /^ {0,3}(`{3,}|~{3,})\s*$/.exec(lines[i]);
+      if (closeMatch && closeMatch[1][0] === fenceChar && closeMatch[1].length >= fenceLen) {
+        out.push("");
+        break;
       }
-      return match;
-    })
-    .replace(INLINE_CODE_PATTERN, "``");
+      out.push("");
+      i++;
+    }
+  }
+  return out.join("\n");
+}
+
+export function extractWikiLinks(markdown: string, sourceRelativePath: string): string[] {
+  const codeMasked = stripFencedCodeBlocks(markdown).replace(INLINE_CODE_PATTERN, "``");
   const searchable = codeMasked.replace(RELATED_BLOCK_PATTERN, "");
   const links: string[] = [];
   for (const match of searchable.matchAll(OBSIDIAN_LINK_PATTERN)) {
