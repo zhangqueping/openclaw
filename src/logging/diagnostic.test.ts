@@ -1023,8 +1023,8 @@ describe("stuck session diagnostics threshold", () => {
       unsubscribe();
     }
 
-    // hasActiveModelCall surfaces the model call for classification, so the
-    // session is visible to diagnostics.  Active-abort recovery still requires
+    // activeWorkKind === "model_call" (derived from activeModelCalls) makes the
+    // session visible to diagnostics.  Active-abort recovery still requires
     // hasActiveEmbeddedRun (live-owner signal) — CLI sessions are classified
     // but not force-recovered until #90750 cleanup lands.
     expectRecordFields(

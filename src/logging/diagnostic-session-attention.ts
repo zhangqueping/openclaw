@@ -81,7 +81,6 @@ export function classifySessionAttention(params: {
     if (
       params.activity.activeWorkKind === "model_call" &&
       params.activity.hasActiveEmbeddedRun === true &&
-      params.activity.hasActiveModelCall === true &&
       lastProgressAgeMs > params.staleMs
     ) {
       if (

@@ -78,7 +78,6 @@ describe("classifySessionAttention", () => {
       activity: {
         activeWorkKind: "model_call" as const,
         hasActiveEmbeddedRun: true,
-        hasActiveModelCall: true,
         lastProgressAgeMs: 31_000,
       },
       expected: {
@@ -95,7 +94,6 @@ describe("classifySessionAttention", () => {
       activity: {
         activeWorkKind: "model_call" as const,
         hasActiveEmbeddedRun: true,
-        hasActiveModelCall: true,
         lastProgressAgeMs: 60_000,
       },
       expected: {
@@ -129,7 +127,6 @@ describe("classifySessionAttention", () => {
       activity: {
         activeWorkKind: "model_call" as const,
         hasActiveEmbeddedRun: false,
-        hasActiveModelCall: true,
         lastProgressAgeMs: 31_000,
         lastProgressReason: "model_call:started",
       },
@@ -165,7 +162,6 @@ describe("classifySessionAttention", () => {
       activity: {
         activeWorkKind: "model_call" as const,
         hasActiveEmbeddedRun: false,
-        hasActiveModelCall: true,
         lastProgressAgeMs: 31_000,
       },
       expected: {
