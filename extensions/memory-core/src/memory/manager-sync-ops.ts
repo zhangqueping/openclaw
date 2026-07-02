@@ -2256,6 +2256,20 @@ export abstract class MemoryManagerSyncOps {
                   this.resetSessionDelta(absPath, entry.size);
                   return null;
                 }
+                // Skip cron-generated session transcripts so internal cron
+                // assistant output stays excluded from memory_search.  The
+                // flag is set by trusted record-level provenance or text-based
+                // archive detection in buildSessionEntry.  (#98241)
+                if (entry.generatedByCronRun) {
+                  if (params.progress) {
+                    params.progress.completed += 1;
+                    params.progress.report({
+                      completed: params.progress.completed,
+                      total: params.progress.total,
+                    });
+                  }
+                  return null;
+                }
                 return entry;
               } finally {
                 await yieldAfterSessionFile();
@@ -2333,6 +2347,18 @@ export abstract class MemoryManagerSyncOps {
             });
           }
           this.resetSessionDelta(absPath, entry.size);
+          return;
+        }
+        // Skip cron-generated session transcripts so internal cron
+        // assistant output stays excluded from memory_search.  (#98241)
+        if (entry.generatedByCronRun) {
+          if (params.progress) {
+            params.progress.completed += 1;
+            params.progress.report({
+              completed: params.progress.completed,
+              total: params.progress.total,
+            });
+          }
           return;
         }
         await this.indexFile(entry, { source: "sessions", content: entry.content });
