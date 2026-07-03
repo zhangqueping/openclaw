@@ -308,6 +308,11 @@ export class CodexAppServerEventProjector {
         this.promptErrorSource = "prompt";
         break;
       default:
+        embeddedAgentLog.warn("codex app-server unknown notification method dropped", {
+          method: notification.method,
+          turnId: readNotificationTurnId(params) ?? "<missing>",
+          threadId: readString(params, "thread_id") ?? "<missing>",
+        });
         break;
     }
   }
@@ -2245,7 +2250,19 @@ function itemStatus(item: CodexThreadItem): "completed" | "failed" | "running" |
   if (status === "inProgress" || status === "running") {
     return "running";
   }
-  return "completed";
+  if (status === "completed") {
+    return "completed";
+  }
+  // Unknown item status — future Codex protocol drift.  Fail closed so a new
+  // upstream variant (e.g. "cancelled", "timedOut") is treated as a failure
+  // rather than silently projected as a successful completion.
+  const itemId = readItemString(item, "id") ?? readItemString(item, "callId") ?? "<unknown>";
+  embeddedAgentLog.warn("codex app-server unknown item status treated as failed", {
+    rawStatus: String(status ?? "<missing>"),
+    itemId,
+    itemType: readItemString(item, "type") ?? "<unknown>",
+  });
+  return "failed";
 }
 
 function formatMissingToolResultError(params: { id: string; name: string }): string {

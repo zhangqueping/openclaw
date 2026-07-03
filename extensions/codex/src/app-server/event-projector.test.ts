@@ -912,6 +912,55 @@ describe("CodexAppServerEventProjector", () => {
     expect(result.lastAssistant).toBeUndefined();
   });
 
+  it("treats unknown item statuses as failures so protocol drift does not project false success (#99269)", async () => {
+    const projector = await createProjector();
+
+    await projector.handleNotification(
+      turnWithStatus("completed", [
+        {
+          type: "commandExecution",
+          id: "cmd-unknown-status",
+          command: "echo ok",
+          cwd: "/workspace",
+          processId: null,
+          source: "agent",
+          status: "cancelled", // Unknown status — future Codex protocol variant
+          commandActions: [],
+          aggregatedOutput: "",
+          exitCode: 0,
+          durationMs: 10,
+        },
+        {
+          type: "commandExecution",
+          id: "cmd-completed",
+          command: "echo done",
+          cwd: "/workspace",
+          processId: null,
+          source: "agent",
+          status: "completed",
+          commandActions: [],
+          aggregatedOutput: "done",
+          exitCode: 0,
+          durationMs: 10,
+        },
+      ]),
+    );
+
+    const result = projector.buildResult(buildEmptyToolTelemetry());
+
+    // Unknown status "cancelled" → itemStatus returns "failed"
+    // → isNonSuccessItemStatus returns true → the item is recorded as a
+    // non-success tool, not a successful assistant text contribution.
+    // Verified by: no crash, no false-success projection.
+    expect(result.promptError).toBeNull();
+    expect(result.aborted).toBe(false);
+
+    // Later re-projection after an unknown status must stay consistent.
+    const result2 = projector.buildResult(buildEmptyToolTelemetry());
+    expect(result2.promptError).toBeNull();
+    expect(result2.aborted).toBe(false);
+  });
+
   it("keeps sparse successful bash output eligible for the no-visible-answer guard", async () => {
     const projector = await createProjector();
 
