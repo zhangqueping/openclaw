@@ -33,6 +33,23 @@ function resolveLoadedSessionConversationThreadInfo(
     rawId,
   }) as SessionConversationHookResult | null | undefined;
   if (!resolved?.id?.trim()) {
+    // Lightweight fallback: when the channel plugin is not yet loaded, treat
+    // rightmost `:topic:` segments as thread markers so hot-path guards like
+    // sessions_send's thread-target rejection work before the plugin loads.
+    // Generic parseThreadSessionSuffix intentionally stays :thread:-only so
+    // provider-owned topic-shaped peer IDs (Feishu, etc.) are not reclassified.
+    const topicMarker = ":topic:";
+    const lowerRawId = rawId.toLowerCase();
+    const topicIndex = lowerRawId.lastIndexOf(topicMarker);
+    if (topicIndex > 0) {
+      const baseId = rawId.slice(0, topicIndex);
+      if (baseId.trim()) {
+        return {
+          baseSessionKey: `${raw.prefix}:${baseId}`,
+          threadId: rawId.slice(topicIndex + topicMarker.length),
+        };
+      }
+    }
     return null;
   }
   // Loaded-plugin read paths avoid bundled fallback/materialization; if the
