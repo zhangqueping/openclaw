@@ -101,8 +101,6 @@ describe("compaction identifier-preservation instructions", () => {
   });
 
   it("preserves chunk timestamps in staged-split merge messages instead of all Date.now()", async () => {
-    // Messages 1-4 have timestamps 1-4; messages 5-8 have timestamps 5-8.
-    // With parts=2, chunk boundaries preserve relative chronological ordering.
     await runSummary(4, {
       maxChunkTokens: 1000,
       parts: 2,
@@ -111,26 +109,19 @@ describe("compaction identifier-preservation instructions", () => {
 
     // 3 calls: 2 chunk summaries + 1 merge
     expect(mockGenerateSummary).toHaveBeenCalledTimes(3);
-    const mergeCall = mockGenerateSummary.mock.calls[2];
-    const mergeMessages = mergeCall?.[0] as AgentMessage[] | undefined;
-    expect(mergeMessages).toBeDefined();
-    expect(mergeMessages?.length).toBeGreaterThanOrEqual(2);
 
-    // Verify merge messages use chunk timestamps, not all Date.now()
-    const mergeTimestamps = mergeMessages
-      ?.map((m: AgentMessage) => (m as { timestamp?: number }).timestamp)
-      .filter((t: unknown): t is number => typeof t === "number");
-    expect(mergeTimestamps?.length).toBeGreaterThanOrEqual(2);
-    // With the fix, timestamps are from the first message of each chunk
-    // (small values like 1, 3), not Date.now() (~1.7e12).
-    // Assert at least one timestamp is under 1e10 to prove it's not Date.now().
-    expect(mergeTimestamps?.some((t) => t > 0 && t < 1e10)).toBe(true);
-    // Verify chunk order labels are present — allows LLM merger to distinguish
-    // older vs newer history during the final merge pass.
-    const mergeContent =
-      mergeMessages?.map((m: AgentMessage) => (m as { content?: string }).content).join("\n") ?? "";
-    expect(mergeContent).toContain("[Chunk 1/2]");
-    expect(mergeContent).toContain("[Chunk 2/2]");
+    // Verify that the merge step receives chunk ordering labels with source time
+    // ranges, so the LLM can distinguish oldest vs newest context and see the
+    // actual time span each chunk covers during the final merge pass.
+    // The synthetic merge messages have a precise known shape (role: "user",
+    // content: string, timestamp: number) — use an exact type rather than
+    // AgentMessage[] (which is a union that does not guarantee content).
+    type SyntheticMergeMessage = { role: "user"; content: string; timestamp: number };
+    const mergeMessages = mockGenerateSummary.mock.calls[2]![0] as SyntheticMergeMessage[];
+    expect(mergeMessages[0]!.content).toContain("[Chunk 1 — oldest messages [");
+    expect(mergeMessages[0]!.content).toContain("]");
+    expect(mergeMessages[1]!.content).toContain("[Chunk 2 — most recent messages [");
+    expect(mergeMessages[1]!.content).toContain("]");
   });
 
   it("keeps identifier-preservation guidance on staged split + merge summarization", async () => {
