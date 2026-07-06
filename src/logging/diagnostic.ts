@@ -893,7 +893,13 @@ export function logSessionStateChange(
     state.activeQueuedTurn = state.queueDepth > 0;
   }
   if (params.state === "idle") {
-    state.queueDepth = Math.max(0, state.queueDepth - 1);
+    // When the active embedded run ends, it has consumed all messages
+    // that were steered into it. Decrementing by 1 does not account for
+    // multiple steered messages, leaving a residual queueDepth that falsely
+    // signals queued work. Zero the backlog because a real new message
+    // would increment queueDepth via logMessageQueued before the session
+    // leaves the idle state.
+    state.queueDepth = 0;
     state.activeQueuedTurn = false;
   }
   if (!isProbeSession && diag.isEnabled("debug")) {

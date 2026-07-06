@@ -235,6 +235,38 @@ describe("diagnostic session state pruning", () => {
     expect(getDiagnosticSessionState({ sessionKey }).queueDepth).toBe(0);
     expect(getDiagnosticSessionStateCountForTest()).toBe(1);
   });
+
+  it("reconciles queueDepth to zero when idle transition follows multiple steered messages (#98685)", () => {
+    const sessionKey = "agent:main:embedded";
+
+    // Simulate multiple messages steered into an active embedded run:
+    //   logMessageQueued x3 → queueDepth = 3
+    //   logSessionStateChange("processing") → starts run
+    //   logSessionStateChange("idle") → run completed
+    // Before fix: queueDepth = 2 (3 - 1), residual from steered messages
+    // After fix:  queueDepth = 0, run consumed all steered work
+    logMessageQueued({ sessionId: "s1", sessionKey, source: "user" });
+    logMessageQueued({ sessionId: "s1", sessionKey, source: "steer" });
+    logMessageQueued({ sessionId: "s1", sessionKey, source: "steer" });
+    logSessionStateChange({ sessionId: "s1", sessionKey, state: "processing" });
+    logSessionStateChange({ sessionId: "s1", sessionKey, state: "idle", reason: "run_completed" });
+
+    expect(getDiagnosticSessionState({ sessionKey }).queueDepth).toBe(0);
+  });
+
+  it("does not lose queueDepth from a message arriving after idle transition", () => {
+    const sessionKey = "agent:main:embedded";
+
+    // Run completes, queueDepth reconciled to 0, then a new message arrives
+    logMessageQueued({ sessionId: "s1", sessionKey, source: "user" });
+    logSessionStateChange({ sessionId: "s1", sessionKey, state: "processing" });
+    logSessionStateChange({ sessionId: "s1", sessionKey, state: "idle", reason: "run_completed" });
+    expect(getDiagnosticSessionState({ sessionKey }).queueDepth).toBe(0);
+
+    // New message after idle — must be counted
+    logMessageQueued({ sessionId: "s1", sessionKey, source: "user" });
+    expect(getDiagnosticSessionState({ sessionKey }).queueDepth).toBe(1);
+  });
 });
 
 describe("diagnostic session activity aliases", () => {
