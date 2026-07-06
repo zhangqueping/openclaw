@@ -75,9 +75,7 @@ describe("lintMemoryWikiVault", () => {
       },
     });
     await Promise.all(
-      ["entities", "sources"].map((dir) =>
-        fs.mkdir(path.join(rootDir, dir), { recursive: true }),
-      ),
+      ["entities", "sources"].map((dir) => fs.mkdir(path.join(rootDir, dir), { recursive: true })),
     );
     await fs.writeFile(
       path.join(rootDir, "sources", "alpha.md"),
@@ -113,15 +111,19 @@ describe("lintMemoryWikiVault", () => {
           "~~~scala\n" +
           "def handle(userId: String, request: Request[A]): Future[Option[User]] = ???\n" +
           "~~~\n\n" +
-          'Inline `[[ -z "$str" ]]` code must be skipped.\n',
+          'Inline `[[ -z "$str" ]]` code must be skipped.\n\n' +
+          "Outside code, [[real-missing-link]] must still be reported.\n",
       }),
       "utf8",
     );
 
     const result = await lintMemoryWikiVault(config);
-    const codes = issueCodesForPath(result, "entities/code-samples.md");
-    // No broken-wikilink for the fenced-code or inline-code [[…]] text.
-    expect(codes).not.toContain("broken-wikilink");
+    const linkIssues = result.issues.filter(
+      (issue) => issue.path === "entities/code-samples.md" && issue.code === "broken-wikilink",
+    );
+    expect(linkIssues.map((issue) => issue.message)).toEqual([
+      "Broken wikilink target `real-missing-link`.",
+    ]);
   });
 
   it("accepts unmanaged raw markdown source pages without page frontmatter", async () => {

@@ -533,7 +533,7 @@ describe("extractWikiLinks", () => {
 
   it("does not extract [[…]] inside inline code spans (#97945)", () => {
     const links = extractWikiLinks(
-      "See [[RealPage]].  Never `[[ -z \"$str\" ]]` extract this.",
+      'See [[RealPage]].  Never `[[ -z "$str" ]]` extract this.',
       "entities/test.md",
     );
     expect(links).toEqual(["RealPage"]);
@@ -558,7 +558,7 @@ describe("extractWikiLinks", () => {
       "# Long Fence",
       "",
       "``````csharp",
-      'var result = await client.GetAsync<Response<Item>>(url, cancellationToken);',
+      "var result = await client.GetAsync<Response<Item>>(url, cancellationToken);",
       "``````",
       "",
       "Valid: [[ValidTarget]]",
@@ -600,5 +600,40 @@ describe("extractWikiLinks", () => {
     ].join("\n");
     const links = extractWikiLinks(markdown, "entities/test.md");
     expect(links).toEqual(["RealPage"]);
+  });
+
+  it.each([
+    {
+      name: "an invalid backtick info string",
+      markdown: "```lang`oops\n[[RealPage]]",
+      expected: ["RealPage"],
+    },
+    {
+      name: "an unmatched backtick run",
+      markdown: "```foo``\n[[RealPage]]",
+      expected: ["RealPage"],
+    },
+    {
+      name: "a fenced block inside a blockquote",
+      markdown: "> ```bash\n> [[not-a-link]]\n> ```\n\n[[RealPage]]",
+      expected: ["RealPage"],
+    },
+    {
+      name: "a fenced block inside a list",
+      markdown: "- ```bash\n  [[not-a-link]]\n  ```\n\n[[RealPage]]",
+      expected: ["RealPage"],
+    },
+    {
+      name: "a multiline code span",
+      markdown: "``\n[[not-a-link]]\n`` and [[RealPage]]",
+      expected: ["RealPage"],
+    },
+    {
+      name: "separate multi-backtick code spans",
+      markdown: "``code`` [[RealPage]] ``more``",
+      expected: ["RealPage"],
+    },
+  ])("handles $name without hiding prose links", ({ markdown, expected }) => {
+    expect(extractWikiLinks(markdown, "entities/test.md")).toEqual(expected);
   });
 });
