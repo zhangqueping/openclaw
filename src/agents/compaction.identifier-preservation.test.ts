@@ -125,9 +125,15 @@ describe("compaction identifier-preservation instructions", () => {
     // (small values like 1, 3), not Date.now() (~1.7e12).
     // Assert at least one timestamp is under 1e10 to prove it's not Date.now().
     expect(mergeTimestamps?.some((t) => t > 0 && t < 1e10)).toBe(true);
+    // Verify chunk order labels are present — allows LLM merger to distinguish
+    // older vs newer history during the final merge pass.
+    const mergeContent =
+      mergeMessages?.map((m: AgentMessage) => (m as { content?: string }).content).join("\n") ?? "";
+    expect(mergeContent).toContain("[Chunk 1/2]");
+    expect(mergeContent).toContain("[Chunk 2/2]");
   });
 
-  it("keeps identifier-preservation guidance on staged split + merge summarization with timestamp preservation", async () => {
+  it("keeps identifier-preservation guidance on staged split + merge summarization", async () => {
     await runSummary(4, {
       maxChunkTokens: 1000,
       parts: 2,

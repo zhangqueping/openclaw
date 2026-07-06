@@ -386,14 +386,17 @@ export async function summarizeInStages(params: {
     return partialSummaries[0];
   }
 
-  const summaryMessages: AgentMessage[] = partialSummaries.map((summary, i) => ({
-    role: "user",
-    content: summary,
-    timestamp:
-      typeof plan.chunks[i]?.[0]?.timestamp === "number"
-        ? plan.chunks[i]![0]!.timestamp
-        : Date.now(),
-  }));
+  const summaryMessages: AgentMessage[] = partialSummaries.map((summary, i) => {
+    const chunkLabel = `[Chunk ${i + 1}/${partialSummaries.length}]\n`;
+    return {
+      role: "user" as const,
+      content: `${chunkLabel}${summary}`,
+      timestamp:
+        typeof plan.chunks[i]?.[0]?.timestamp === "number"
+          ? plan.chunks[i]![0]!.timestamp
+          : Date.now(),
+    };
+  });
 
   const custom = params.customInstructions?.trim();
   const mergeInstructions = custom
