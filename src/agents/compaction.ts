@@ -389,7 +389,10 @@ export async function summarizeInStages(params: {
   const summaryMessages: AgentMessage[] = partialSummaries.map((summary, i) => ({
     role: "user",
     content: summary,
-    timestamp: plan.chunks[i]?.[0]?.timestamp ?? Date.now(),
+    timestamp:
+      typeof plan.chunks[i]?.[0]?.timestamp === "number"
+        ? plan.chunks[i]![0]!.timestamp
+        : Date.now(),
   }));
 
   const custom = params.customInstructions?.trim();
