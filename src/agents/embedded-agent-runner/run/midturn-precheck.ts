@@ -25,7 +25,9 @@ export const MID_TURN_PRECHECK_ERROR_MESSAGE =
  * can skip error-forwarding for control-flow signals without a
  * cross-package import dependency.
  */
-export const CONTROL_FLOW_SIGNAL_SENTINEL: unique symbol = Symbol.for("openclaw.controlFlowSignal");
+export const CONTROL_FLOW_SIGNAL_SENTINEL: unique symbol = Symbol.for(
+  "agent-core.controlFlowError",
+);
 
 /**
  * Internal control-flow signal thrown after a tool result makes the next prompt
@@ -39,8 +41,8 @@ export class MidTurnPrecheckSignal extends Error {
     super(MID_TURN_PRECHECK_ERROR_MESSAGE);
     this.name = "MidTurnPrecheckSignal";
     this.request = request;
-    // Mark as a control-flow signal so agent-core (agent-loop.ts / agent.ts)
-    // skips error-forwarding. Symbol.for keeps the key identical across packages
+    // Mark as a control-flow signal so agent-core (agent.ts) skips
+    // error-forwarding. Symbol.for keeps the key identical across packages
     // without import dependencies.
     (this as Record<symbol, unknown>)[CONTROL_FLOW_SIGNAL_SENTINEL] = true;
   }

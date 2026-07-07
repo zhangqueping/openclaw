@@ -38,10 +38,20 @@ function defaultConvertToLlm(messages: AgentMessage[]): Message[] {
   );
 }
 
-const OPENCLAW_CONTROL_FLOW_SIGNAL = Symbol.for("openclaw.controlFlowSignal");
+/**
+ * Sentinel carried by errors that signal a control-flow decision rather than
+ * a terminal failure. When the agent loop runner catches an error that carries
+ * this symbol, it skips the normal failure-event path so the caller can handle
+ * recovery via a side channel.
+ *
+ * The embedded runner uses this for MidTurnPrecheckSignal: the signal
+ * interrupts `transformContext` before a model call and the attempt runner
+ * recovers via the `pendingMidTurnPrecheckRequest` callback.
+ */
+const AGENT_CORE_CONTROL_FLOW_SENTINEL = Symbol.for("agent-core.controlFlowError");
 
-function isControlFlowSignal(error: unknown): boolean {
-  return Boolean(error && typeof error === "object" && OPENCLAW_CONTROL_FLOW_SIGNAL in error);
+function isControlFlowError(error: unknown): boolean {
+  return Boolean(error && typeof error === "object" && AGENT_CORE_CONTROL_FLOW_SENTINEL in error);
 }
 
 const EMPTY_USAGE = {
@@ -543,7 +553,7 @@ export class Agent {
     // Control-flow signals (e.g. MidTurnPrecheckSignal) are handled by the
     // caller via a side-channel callback — do not push a synthetic failure
     // event that would leak a premature error into the UI stream.
-    if (isControlFlowSignal(error)) {
+    if (isControlFlowError(error)) {
       return;
     }
     const failureMessage = {

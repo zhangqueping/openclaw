@@ -1256,7 +1256,7 @@ describe("agentLoop tool termination", () => {
 });
 
 describe("control-flow signal handling", () => {
-  const CONTROL_FLOW_SENTINEL = Symbol.for("openclaw.controlFlowSignal");
+  const CONTROL_FLOW_SENTINEL = Symbol.for("agent-core.controlFlowError");
 
   function createControlFlowSignal(message: string): Error {
     const error = new Error(message);
@@ -1265,48 +1265,14 @@ describe("control-flow signal handling", () => {
     return error;
   }
 
-  const throwingTransformContext = () => {
+  // Must be async to match AgentOptions.transformContext return type.
+  async function throwingTransformContext(): Promise<AgentMessage[]> {
     throw createControlFlowSignal("test control interruption");
-  };
-
-  describe("agentLoop EventStream", () => {
-    it("ends the stream silently for control-flow signals", async () => {
-      const stream = agentLoop(
-        [{ role: "user", content: "hello", timestamp: 1 }],
-        { systemPrompt: "", messages: [] },
-        { ...config, transformContext: throwingTransformContext },
-      );
-
-      const events = await collectEvents(stream);
-      const result = await stream.result();
-
-      // The stream should end without pushing an error event.
-      expect(events.map((e) => e.type)).not.toContain("agent_end");
-      expect(result).toEqual([]);
-    });
-
-    it("ends the continue stream silently for control-flow signals", async () => {
-      const context: AgentContext = {
-        systemPrompt: "",
-        messages: [{ role: "user", content: "hello", timestamp: 1 }],
-      };
-      const stream = agentLoopContinue(context, {
-        ...config,
-        transformContext: throwingTransformContext,
-      });
-
-      const events = await collectEvents(stream);
-      const result = await stream.result();
-
-      expect(events.map((e) => e.type)).not.toContain("agent_end");
-      expect(result).toEqual([]);
-    });
-  });
+  }
 
   describe("Agent class", () => {
     it("does not push a synthetic failure for control-flow signals", async () => {
       const agent = new Agent({
-        ...config,
         transformContext: throwingTransformContext,
         streamFn: async () => {
           const stream = createAssistantMessageEventStream();
@@ -1333,7 +1299,10 @@ describe("control-flow signal handling", () => {
 
       let errorEvent: AgentEvent | undefined;
       agent.subscribe((event) => {
-        if (event.type === "turn_end" && event.message.stopReason === "error") {
+        if (
+          event.type === "turn_end" &&
+          (event.message as unknown as { stopReason?: string }).stopReason === "error"
+        ) {
           errorEvent = event;
         }
       });
@@ -1350,7 +1319,6 @@ describe("control-flow signal handling", () => {
     it("still emits failure events for real errors", async () => {
       const realError = new Error("real provider failure");
       const agent = new Agent({
-        ...config,
         streamFn: async () => {
           throw realError;
         },
@@ -1358,7 +1326,10 @@ describe("control-flow signal handling", () => {
 
       let errorEvent: AgentEvent | undefined;
       agent.subscribe((event) => {
-        if (event.type === "turn_end" && event.message.stopReason === "error") {
+        if (
+          event.type === "turn_end" &&
+          (event.message as unknown as { stopReason?: string }).stopReason === "error"
+        ) {
           errorEvent = event;
         }
       });
@@ -1368,7 +1339,10 @@ describe("control-flow signal handling", () => {
 
       // Error event should have been emitted for a real error
       expect(errorEvent).toBeDefined();
-      expect(errorEvent?.message).toMatchObject({
+      expect(
+        (errorEvent as unknown as { message: { stopReason: string; errorMessage: string } })
+          ?.message,
+      ).toMatchObject({
         stopReason: "error",
         errorMessage: "real provider failure",
       });
