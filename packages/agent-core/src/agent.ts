@@ -38,6 +38,12 @@ function defaultConvertToLlm(messages: AgentMessage[]): Message[] {
   );
 }
 
+const OPENCLAW_CONTROL_FLOW_SIGNAL = Symbol.for("openclaw.controlFlowSignal");
+
+function isControlFlowSignal(error: unknown): boolean {
+  return Boolean(error && typeof error === "object" && OPENCLAW_CONTROL_FLOW_SIGNAL in error);
+}
+
 const EMPTY_USAGE = {
   input: 0,
   output: 0,
@@ -534,6 +540,12 @@ export class Agent {
   }
 
   private async handleRunFailure(error: unknown, aborted: boolean): Promise<void> {
+    // Control-flow signals (e.g. MidTurnPrecheckSignal) are handled by the
+    // caller via a side-channel callback — do not push a synthetic failure
+    // event that would leak a premature error into the UI stream.
+    if (isControlFlowSignal(error)) {
+      return;
+    }
     const failureMessage = {
       role: "assistant",
       content: [{ type: "text", text: "" }],

@@ -1255,6 +1255,127 @@ describe("agentLoop tool termination", () => {
   });
 });
 
+describe("control-flow signal handling", () => {
+  const CONTROL_FLOW_SENTINEL = Symbol.for("openclaw.controlFlowSignal");
+
+  function createControlFlowSignal(message: string): Error {
+    const error = new Error(message);
+    error.name = "TestControlSignal";
+    Object.assign(error, { [CONTROL_FLOW_SENTINEL]: true });
+    return error;
+  }
+
+  const throwingTransformContext = () => {
+    throw createControlFlowSignal("test control interruption");
+  };
+
+  describe("agentLoop EventStream", () => {
+    it("ends the stream silently for control-flow signals", async () => {
+      const stream = agentLoop(
+        [{ role: "user", content: "hello", timestamp: 1 }],
+        { systemPrompt: "", messages: [] },
+        { ...config, transformContext: throwingTransformContext },
+      );
+
+      const events = await collectEvents(stream);
+      const result = await stream.result();
+
+      // The stream should end without pushing an error event.
+      expect(events.map((e) => e.type)).not.toContain("agent_end");
+      expect(result).toEqual([]);
+    });
+
+    it("ends the continue stream silently for control-flow signals", async () => {
+      const context: AgentContext = {
+        systemPrompt: "",
+        messages: [{ role: "user", content: "hello", timestamp: 1 }],
+      };
+      const stream = agentLoopContinue(context, {
+        ...config,
+        transformContext: throwingTransformContext,
+      });
+
+      const events = await collectEvents(stream);
+      const result = await stream.result();
+
+      expect(events.map((e) => e.type)).not.toContain("agent_end");
+      expect(result).toEqual([]);
+    });
+  });
+
+  describe("Agent class", () => {
+    it("does not push a synthetic failure for control-flow signals", async () => {
+      const agent = new Agent({
+        ...config,
+        transformContext: throwingTransformContext,
+        streamFn: async () => {
+          const stream = createAssistantMessageEventStream();
+          queueMicrotask(() => {
+            stream.push({
+              type: "done",
+              reason: "stop",
+              message: {
+                role: "assistant" as const,
+                content: [{ type: "text" as const, text: "ok" }],
+                api: model.api,
+                provider: model.provider,
+                model: model.id,
+                usage: TEST_USAGE,
+                stopReason: "stop" as const,
+                timestamp: Date.now(),
+              },
+            });
+            stream.end();
+          });
+          return stream;
+        },
+      });
+
+      let errorEvent: AgentEvent | undefined;
+      agent.subscribe((event) => {
+        if (event.type === "turn_end" && event.message.stopReason === "error") {
+          errorEvent = event;
+        }
+      });
+
+      // prompt should complete without rejecting
+      await agent.prompt("test message");
+
+      // No error event should have been emitted for the control-flow signal
+      expect(errorEvent).toBeUndefined();
+      // agent state should not carry an error message
+      expect(agent.state.errorMessage).toBeUndefined();
+    });
+
+    it("still emits failure events for real errors", async () => {
+      const realError = new Error("real provider failure");
+      const agent = new Agent({
+        ...config,
+        streamFn: async () => {
+          throw realError;
+        },
+      });
+
+      let errorEvent: AgentEvent | undefined;
+      agent.subscribe((event) => {
+        if (event.type === "turn_end" && event.message.stopReason === "error") {
+          errorEvent = event;
+        }
+      });
+
+      // prompt should complete without rejecting (Agent catches internally)
+      await agent.prompt("test message");
+
+      // Error event should have been emitted for a real error
+      expect(errorEvent).toBeDefined();
+      expect(errorEvent?.message).toMatchObject({
+        stopReason: "error",
+        errorMessage: "real provider failure",
+      });
+    });
+  });
+});
+
 describe("agentLoop thinking state", () => {
   function makeAssistantMessage(
     activeModel: Model,
