@@ -38,6 +38,12 @@ const EMPTY_USAGE = {
 
 const EventStreamConstructor: typeof SourceEventStream = LlmEventStream;
 
+const OPENCLAW_CONTROL_FLOW_SIGNAL = Symbol.for("openclaw.controlFlowSignal");
+
+function isControlFlowSignal(error: unknown): boolean {
+  return Boolean(error && typeof error === "object" && OPENCLAW_CONTROL_FLOW_SIGNAL in error);
+}
+
 type AssistantMessageUpdateEvent = Extract<
   AssistantMessageEvent,
   {
@@ -118,6 +124,13 @@ export function agentLoop(
       stream.end(messages);
     })
     .catch((error: unknown) => {
+      if (isControlFlowSignal(error)) {
+        // Control-flow signals (e.g. MidTurnPrecheckSignal) are handled by
+        // the caller via a side-channel callback. End the stream silently
+        // so no premature error leaks into the UI.
+        stream.end([]);
+        return;
+      }
       pushLoopFailure(stream, config, error, signal?.aborted === true);
     });
 
@@ -163,6 +176,12 @@ export function agentLoopContinue(
       stream.end(messages);
     })
     .catch((error: unknown) => {
+      if (isControlFlowSignal(error)) {
+        // Control-flow signals are handled by the caller via a side-channel
+        // callback. End the stream silently.
+        stream.end([]);
+        return;
+      }
       pushLoopFailure(stream, config, error, signal?.aborted === true);
     });
 
