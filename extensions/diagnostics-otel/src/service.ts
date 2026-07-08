@@ -3416,7 +3416,6 @@ export function createDiagnosticsOtelService(): OpenClawPluginService {
         }
         const spanAttrs: Record<string, string | number | boolean> = {
           "openclaw.failover.reason": lowCardinalityAttr(evt.reason, "unknown"),
-          has_fallback: true,
         };
         if (evt.fromProvider) {
           spanAttrs["openclaw.provider"] = evt.fromProvider;

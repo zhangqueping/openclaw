@@ -1733,21 +1733,6 @@ async function runWithModelFallbackInternal<T>(
     });
     if ("success" in attemptRun) {
       if (i > 0 || attempts.length > 0 || attemptedDuringCooldown) {
-        // Emit a failover diagnostic event so OTEL traces record
-        // has_fallback=true and the fallback chain becomes visible.
-        if (params.sessionId) {
-          const prevAttempt = attempts.at(-1);
-          emitFailoverEvent({
-            sessionId: params.sessionId,
-            lane: params.lane,
-            fromProvider: prevAttempt?.provider ?? params.provider,
-            fromModel: prevAttempt?.model ?? params.model,
-            toProvider: candidate.provider,
-            toModel: candidate.model,
-            reason: prevAttempt?.reason ?? "unknown",
-            cascadeDepth: attempts.length,
-          });
-        }
         await observeDecision({
           decision: "candidate_succeeded",
           runId: params.runId,
@@ -1913,6 +1898,22 @@ async function runWithModelFallbackInternal<T>(
         attempt: i + 1,
         total: candidates.length,
       });
+      // Emit a failover diagnostic event at each failed-candidate
+      // → next-candidate transition so OTEL traces record the full
+      // fallback chain (including all-failed multi-hop storms).
+      const nextCandidate = candidates[i + 1];
+      if (nextCandidate && params.sessionId) {
+        emitFailoverEvent({
+          sessionId: params.sessionId,
+          lane: params.lane,
+          fromProvider: candidate.provider,
+          fromModel: candidate.model,
+          toProvider: nextCandidate.provider,
+          toModel: nextCandidate.model,
+          reason: describeFailoverError(err).reason ?? "unknown",
+          cascadeDepth: i + 1,
+        });
+      }
     }
   }
 
