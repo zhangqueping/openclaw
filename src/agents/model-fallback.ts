@@ -1733,6 +1733,21 @@ async function runWithModelFallbackInternal<T>(
     });
     if ("success" in attemptRun) {
       if (i > 0 || attempts.length > 0 || attemptedDuringCooldown) {
+        // Emit a failover diagnostic event so OTEL traces record
+        // has_fallback=true and the fallback chain becomes visible.
+        if (params.sessionId) {
+          const prevAttempt = attempts.at(-1);
+          emitFailoverEvent({
+            sessionId: params.sessionId,
+            lane: params.lane,
+            fromProvider: prevAttempt?.provider ?? params.provider,
+            fromModel: prevAttempt?.model ?? params.model,
+            toProvider: candidate.provider,
+            toModel: candidate.model,
+            reason: prevAttempt?.reason ?? "unknown",
+            cascadeDepth: attempts.length,
+          });
+        }
         await observeDecision({
           decision: "candidate_succeeded",
           runId: params.runId,
