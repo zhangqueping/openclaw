@@ -551,9 +551,16 @@ export class Agent {
 
   private async handleRunFailure(error: unknown, aborted: boolean): Promise<void> {
     // Control-flow signals (e.g. MidTurnPrecheckSignal) are handled by the
-    // caller via a side-channel callback — do not push a synthetic failure
-    // event that would leak a premature error into the UI stream.
+    // caller via a side-channel callback — skip the synthetic failure push
+    // but still settle the run with a clean agent_end so lifecycle subscribers
+    // (compaction waiters, session-state cleanup, terminal hooks) see the run
+    // end and the attempt runner can resume via the pendingMidTurnPrecheckRequest
+    // side channel.
     if (isControlFlowError(error)) {
+      await this.processEvents({
+        type: "agent_end",
+        messages: this.mutableState.messages.slice(),
+      });
       return;
     }
     const failureMessage = {

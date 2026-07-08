@@ -1271,7 +1271,7 @@ describe("control-flow signal handling", () => {
   }
 
   describe("Agent class", () => {
-    it("does not push a synthetic failure for control-flow signals", async () => {
+    it("settles with clean agent_end for control-flow signals, no error event", async () => {
       const agent = new Agent({
         transformContext: throwingTransformContext,
         streamFn: async () => {
@@ -1298,12 +1298,16 @@ describe("control-flow signal handling", () => {
       });
 
       let errorEvent: AgentEvent | undefined;
+      let agentEndEvent: AgentEvent | undefined;
       agent.subscribe((event) => {
         if (
           event.type === "turn_end" &&
           (event.message as unknown as { stopReason?: string }).stopReason === "error"
         ) {
           errorEvent = event;
+        }
+        if (event.type === "agent_end") {
+          agentEndEvent = event;
         }
       });
 
@@ -1312,6 +1316,14 @@ describe("control-flow signal handling", () => {
 
       // No error event should have been emitted for the control-flow signal
       expect(errorEvent).toBeUndefined();
+      // agent_end MUST still fire so lifecycle subscribers settle
+      expect(agentEndEvent).toBeDefined();
+      // agent_end messages must not contain a synthetic failure
+      const endMessages = (agentEndEvent as unknown as { messages?: unknown[] })?.messages ?? [];
+      const errorMsgs = endMessages.filter(
+        (m) => (m as { stopReason?: string }).stopReason === "error",
+      );
+      expect(errorMsgs).toHaveLength(0);
       // agent state should not carry an error message
       expect(agent.state.errorMessage).toBeUndefined();
     });
