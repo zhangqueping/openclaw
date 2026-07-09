@@ -11,6 +11,7 @@ import { buildAgentMainSessionKey, normalizeAgentId } from "../routing/session-k
 import type { RuntimeEnv } from "../runtime.js";
 import type { TuiResult } from "../tui/tui-types.js";
 import { resolveUserPath, shortenHomePath } from "../utils.js";
+import { truncateUtf16Safe } from "@openclaw/normalization-core/utf16-slice";
 import { appendCrestodianAuditEntry, resolveCrestodianAuditPath } from "./audit.js";
 import type { CrestodianOverview } from "./overview.js";
 
@@ -962,7 +963,7 @@ export async function executeCrestodianOperation(
       const rendered = JSON.stringify(redacted, null, 2) ?? "null";
       runtime.log(
         rendered.length > CONFIG_GET_OUTPUT_MAX_CHARS
-          ? `${operation.path} = ${rendered.slice(0, CONFIG_GET_OUTPUT_MAX_CHARS)}\n… (truncated)`
+          ? `${operation.path} = ${truncateUtf16Safe(rendered, CONFIG_GET_OUTPUT_MAX_CHARS)}\n… (truncated)`
           : `${operation.path} = ${rendered}`,
       );
       return { applied: false };
