@@ -504,6 +504,53 @@ describe("runMemoryFlushIfNeeded", () => {
     expect(payload?.text?.endsWith("…")).toBe(true);
   });
 
+  it("keeps persisted and visible memory-flush errors UTF-16 safe at their caps", async () => {
+    const storePath = path.join(rootDir, "sessions.json");
+    const sessionEntry: SessionEntry = {
+      sessionId: "session",
+      updatedAt: Date.now(),
+      totalTokens: 80_000,
+      compactionCount: 1,
+    };
+    await writeTestSessionStore(storePath, "main", sessionEntry);
+    const visibleErrorPayloads: ReplyPayload[] = [];
+    const message = `${"a".repeat(198)}🚀${"b".repeat(395)}🚀${"c".repeat(20)}`;
+    runWithModelFallbackMock.mockRejectedValueOnce(new Error(message));
+
+    await runMemoryFlushIfNeeded({
+      cfg: { agents: { defaults: { compaction: { memoryFlush: {} } } } },
+      followupRun: createTestFollowupRun(),
+      sessionCtx: { Provider: "whatsapp" } as unknown as TemplateContext,
+      defaultModel: "anthropic/claude-opus-4-7",
+      agentCfgContextTokens: 100_000,
+      resolvedVerboseLevel: "off",
+      sessionEntry,
+      sessionStore: { main: sessionEntry },
+      sessionKey: "main",
+      storePath,
+      isHeartbeat: false,
+      replyOperation: createReplyOperation(),
+      onVisibleErrorPayloads: (payloads) => {
+        visibleErrorPayloads.push(...payloads);
+      },
+    });
+
+    const persisted = JSON.parse(await fs.readFile(storePath, "utf8")) as {
+      main: SessionEntry;
+    };
+    const persistedError = persisted.main.memoryFlushLastFailureError;
+    const visibleError = visibleErrorPayloads[0]?.text;
+    const loneSurrogate =
+      /[\uD800-\uDBFF](?![\uDC00-\uDFFF])|(?<![\uD800-\uDBFF])[\uDC00-\uDFFF]/u;
+
+    expect(persistedError).toBe(`${"a".repeat(198)}…`);
+    expect(persistedError?.length).toBeLessThanOrEqual(200);
+    expect(persistedError).not.toMatch(loneSurrogate);
+    expect(visibleError).toBe(`⚠️ ${"a".repeat(198)}🚀${"b".repeat(395)}…`);
+    expect(visibleError?.length).toBeLessThanOrEqual(600);
+    expect(visibleError).not.toMatch(loneSurrogate);
+  });
+
   it("does not surface user-abort errors as visible payloads (regression: #80755)", async () => {
     const sessionEntry: SessionEntry = {
       sessionId: "session",
