@@ -1,4 +1,6 @@
 // Agent Core module implements truncate behavior.
+import { truncateUtf16Safe } from "@openclaw/normalization-core/utf16-slice";
+
 export const DEFAULT_MAX_LINES = 2000;
 export const DEFAULT_MAX_BYTES = 50 * 1024; // 50KB
 export const GREP_MAX_LINE_LENGTH = 500; // Max chars per grep match line
@@ -382,5 +384,5 @@ export function truncateLine(
       }
     }
   }
-  return { text: `${line.slice(0, cut)}... [truncated]`, wasTruncated: true };
+  return { text: `${truncateUtf16Safe(line, cut)}... [truncated]`, wasTruncated: true };
 }
