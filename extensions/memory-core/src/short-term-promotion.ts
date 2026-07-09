@@ -11,6 +11,7 @@ import {
 } from "openclaw/plugin-sdk/memory-core-host-status";
 import { appendMemoryHostEvent } from "openclaw/plugin-sdk/memory-host-events";
 import { sleep } from "openclaw/plugin-sdk/runtime-env";
+import { truncateUtf16Safe } from "openclaw/plugin-sdk/text-utility-runtime";
 import {
   normalizeLowercaseStringOrEmpty,
   normalizeStringEntries,
@@ -2365,7 +2366,7 @@ function truncatePromotedSnippet(snippet: string, maxTokens: number): string {
       : wordBoundary >= Math.floor(limit * 0.65)
         ? wordBoundary
         : limit;
-  return `${hardLimit.slice(0, cutAt).trimEnd()}...`;
+  return `${truncateUtf16Safe(hardLimit, cutAt).trimEnd()}...`;
 }
 
 function formatPromotedSnippetForMemory(rawSnippet: string, maxTokens: number): string {
