@@ -175,6 +175,26 @@ describe("readResponseText", () => {
     });
   });
 
+  it("treats exact-limit responses as complete, not truncated", async () => {
+    // A body whose chunks total exactly maxBytes should return truncated: false.
+    const cancel = vi.fn(async () => undefined);
+    const releaseLock = vi.fn();
+    const response = responseFromReader({
+      chunks: ["hello"],
+      cancel,
+      releaseLock,
+    });
+
+    await expect(readResponseText(response, { maxBytes: 5 })).resolves.toEqual({
+      text: "hello",
+      truncated: false,
+      bytesRead: 5,
+    });
+    // Reader should be released without cancellation when not actually truncated.
+    expect(cancel).not.toHaveBeenCalled();
+    expect(releaseLock).toHaveBeenCalledTimes(1);
+  });
+
   it("preserves uncapped text-only fallback byte accounting", async () => {
     const value = "中文🔥";
     const text = vi.fn(async () => value);

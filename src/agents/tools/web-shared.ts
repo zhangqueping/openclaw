@@ -272,8 +272,16 @@ export async function readResponseText(
         bytesRead += chunk.byteLength;
         parts.push(chunk);
 
-        if (truncated || bytesRead >= maxBytes) {
-          truncated = true;
+        if (truncated) {
+          break;
+        }
+        if (bytesRead >= maxBytes) {
+          // Confirm overflow before declaring truncation — a body
+          // that is exactly the byte limit is complete, not truncated.
+          const next = await reader.read();
+          if (!next.done || (next.value && next.value.byteLength > 0)) {
+            truncated = true;
+          }
           break;
         }
       }
