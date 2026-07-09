@@ -12,6 +12,7 @@ import {
   toImageDataUrl,
 } from "openclaw/plugin-sdk/image-generation";
 import { createSubsystemLogger } from "openclaw/plugin-sdk/logging-core";
+import { truncateUtf16Safe } from "openclaw/plugin-sdk/text-utility-runtime";
 import { resolveClosestSize } from "openclaw/plugin-sdk/media-generation-runtime";
 import { extensionForMime } from "openclaw/plugin-sdk/media-mime";
 import { MAX_IMAGE_BYTES } from "openclaw/plugin-sdk/media-runtime";
@@ -104,7 +105,7 @@ function sanitizeLogValue(value: unknown): string {
     return "unknown";
   }
   return cleaned.length > LOG_VALUE_MAX_CHARS
-    ? `${cleaned.slice(0, LOG_VALUE_MAX_CHARS)}...`
+    ? `${truncateUtf16Safe(cleaned, LOG_VALUE_MAX_CHARS)}...`
     : cleaned;
 }
 
