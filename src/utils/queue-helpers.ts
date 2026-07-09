@@ -5,6 +5,8 @@
  * debounce drains, and force individual collection when cross-channel ordering matters.
  */
 /** Mutable summary state for a capped queue. */
+import { truncateUtf16Safe } from "@openclaw/normalization-core/utf16-slice";
+
 type QueueSummaryState = {
   dropPolicy: "summarize" | "old" | "new";
   droppedCount: number;
@@ -75,7 +77,7 @@ function elideQueueText(text: string, limit = 140): string {
   if (text.length <= limit) {
     return text;
   }
-  return `${text.slice(0, Math.max(0, limit - 1)).trimEnd()}…`;
+  return `${truncateUtf16Safe(text, Math.max(0, limit - 1)).trimEnd()}…`;
 }
 
 /** Normalize whitespace and elide one dropped item for queue summaries. */
