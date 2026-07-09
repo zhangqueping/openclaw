@@ -236,6 +236,26 @@ describe("fallback-state", () => {
     },
   );
 
+  it("keeps fallback reason UTF-16 safe at the boundary", () => {
+    // Place emoji at position 78 so it straddles the slice(0,79) boundary
+    const prefix = "HTTP 503: ";
+    const emoji = "🎉";
+    const resolved = resolveDemoFallbackTransition({
+      attempts: [
+        {
+          provider: "demo-primary",
+          model: "demo-primary/model-a",
+          error: `${prefix}${"x".repeat(78 - prefix.length)}${emoji}after-truncation`,
+        },
+      ],
+    });
+
+    // The result must not end with an unpaired surrogate
+    expect(resolved.reasonSummary).not.toMatch(/[\uD800-\uDFFF]$/u);
+    // Should be truncated (80-char boundary exceeded)
+    expect(resolved.reasonSummary).toContain("…");
+  });
+
   it("still reports fallback when the OpenAI Codex runtime switches model ids", () => {
     expect(
       buildFallbackNotice({
