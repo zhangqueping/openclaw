@@ -144,7 +144,10 @@ export async function createPreUpdateConfigSnapshot(params: {
       flag: "w",
     });
   } catch {
-    // best-effort, do not block update
+    // best-effort, do not block update.
+    // Clear the marker so a future update can attempt the snapshot again instead
+    // of permanently skipping after a transient read or write error.
+    preUpdateConfigSnapshotsWritten.delete(snapshotKey);
   }
 }
 

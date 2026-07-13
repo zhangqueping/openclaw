@@ -235,4 +235,38 @@ describe("config backup rotation", () => {
       await expectPathMissing(`${configPath}.pre-update`);
     });
   });
+
+  it("retries snapshot after a transient read error (#105431)", async () => {
+    await withTempHome(async () => {
+      const configPath = resolveConfigPathFromTempState();
+      const content = JSON.stringify({ plugins: { installs: ["slack"] } });
+      await fs.writeFile(configPath, content, { mode: 0o600 });
+
+      const { existsSync } = await import("node:fs");
+      let readCalled = false;
+      const throwingReadFile = ((_path: string, _encoding: string) => {
+        readCalled = true;
+        throw new Error("EIO: transient read error");
+      }) as typeof fs.readFile;
+
+      // First call: readFile throws, so the snapshot is not written, but the
+      // marker must be cleared so a future update can retry.
+      await createPreUpdateConfigSnapshot({
+        configPath,
+        fs: { writeFile: fs.writeFile, readFile: throwingReadFile, existsSync },
+      });
+      expect(readCalled).toBe(true);
+      await expectPathMissing(`${configPath}.pre-update`);
+
+      // Second call: the marker was cleared, so a working fs writes the snapshot.
+      await createPreUpdateConfigSnapshot({
+        configPath,
+        fs: { writeFile: fs.writeFile, readFile: fs.readFile, existsSync },
+      });
+
+      const snapshotPath = `${configPath}.pre-update`;
+      await expectRegularFile(snapshotPath);
+      await expect(fs.readFile(snapshotPath, "utf-8")).resolves.toBe(content);
+    });
+  });
 });
