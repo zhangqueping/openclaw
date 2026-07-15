@@ -19,7 +19,6 @@ describe("safeJsonStringify", () => {
     circular.self = circular;
     // JSON.stringify would throw "Converting circular structure to JSON" here.
     expect(() => JSON.stringify(circular)).toThrow(TypeError);
-    expect(safeJsonStringify(circular)).toBe(String(circular));
     expect(safeJsonStringify(circular)).toBe("[object Object]");
   });
 
@@ -28,7 +27,7 @@ describe("safeJsonStringify", () => {
     const err: Record<string, unknown> = { code: "ECONNRESET", socket };
     socket.parent = err; // circular
     expect(() => JSON.stringify(err)).toThrow(TypeError);
-    expect(safeJsonStringify(err)).toBe(String(err));
+    expect(safeJsonStringify(err)).toBe("[object Object]");
   });
 
   it("falls back to String for values JSON.stringify drops to undefined", () => {

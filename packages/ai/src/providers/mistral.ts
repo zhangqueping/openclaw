@@ -316,39 +316,6 @@ function truncateErrorText(text: string, maxChars: number): string {
   return `${truncated}... [truncated ${text.length - truncated.length} chars]`;
 }
 
-function buildRequestOptions(model: Model<"mistral-conversations">, options?: MistralOptions) {
-  const requestOptions: {
-    signal?: AbortSignal;
-    retries: { strategy: "none" };
-    headers?: Record<string, string>;
-  } = {
-    retries: { strategy: "none" },
-  };
-  if (options?.signal) {
-    requestOptions.signal = options.signal;
-  }
-
-  const headers: Record<string, string> = {};
-  if (model.headers) {
-    Object.assign(headers, model.headers);
-  }
-  if (options?.headers) {
-    Object.assign(headers, options.headers);
-  }
-
-  // Mistral infrastructure uses `x-affinity` for KV-cache reuse (prefix caching).
-  // Respect explicit caller-provided header values.
-  if (options?.sessionId && !headers["x-affinity"]) {
-    headers["x-affinity"] = options.sessionId;
-  }
-
-  if (Object.keys(headers).length > 0) {
-    requestOptions.headers = headers;
-  }
-
-  return requestOptions;
-}
-
 function buildChatPayload(
   model: Model<"mistral-conversations">,
   context: Context,
