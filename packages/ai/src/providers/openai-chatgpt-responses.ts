@@ -1078,7 +1078,14 @@ async function connectWebSocket(
       }
       settled = true;
       cleanup();
-      socket.close(WEBSOCKET_MESSAGE_TOO_BIG_CLOSE_CODE, "handshake timeout");
+      // Some runtime WebSocket implementations throw if close() is called
+      // before the socket has finished opening; catch so the promise is
+      // always settled.
+      try {
+        socket.close(WEBSOCKET_MESSAGE_TOO_BIG_CLOSE_CODE, "handshake timeout");
+      } catch {
+        // Handshake timed out — close failure is non-fatal.
+      }
       reject(new Error("WebSocket connection handshake timed out"));
     }, connectTimeoutMs ?? CONNECT_WS_HANDSHAKE_TIMEOUT_MS);
     handshakeTimer.unref?.();
@@ -1266,20 +1273,42 @@ function extractWebSocketCloseError(event: unknown): Error {
   return new Error("WebSocket closed");
 }
 
-async function decodeWebSocketData(data: unknown): Promise<string | null> {
+async function decodeWebSocketData(
+  data: unknown,
+  maxBytes?: number,
+): Promise<string | null> {
+  // Enforce byte-size limit before decoding so oversized frames are rejected
+  // before the full payload is materialized as a JS string.  The check works
+  // on raw byte sources (ArrayBuffer, TypedArray) and falls back to the
+  // string-length heuristic for text frames (which are already in memory).
+  const checkBytes = (byteLength: number): void => {
+    if (maxBytes !== undefined && byteLength > maxBytes) {
+      throw new CodexProtocolError(
+        `WebSocket message exceeds maximum size of ${maxBytes} bytes`,
+      );
+    }
+  };
+
   if (typeof data === "string") {
+    if (maxBytes !== undefined) {
+      // Text frames are already a JS string; use utf-8 byte length.
+      checkBytes(new TextEncoder().encode(data).length);
+    }
     return data;
   }
   if (data instanceof ArrayBuffer) {
+    checkBytes(data.byteLength);
     return new TextDecoder().decode(new Uint8Array(data));
   }
   if (ArrayBuffer.isView(data)) {
+    checkBytes(data.byteLength);
     const view = data;
     return new TextDecoder().decode(new Uint8Array(view.buffer, view.byteOffset, view.byteLength));
   }
   if (data && typeof data === "object" && "arrayBuffer" in data) {
     const blobLike = data as { arrayBuffer: () => Promise<ArrayBuffer> };
     const arrayBuffer = await blobLike.arrayBuffer();
+    checkBytes(arrayBuffer.byteLength);
     return new TextDecoder().decode(new Uint8Array(arrayBuffer));
   }
   return null;
@@ -1311,23 +1340,14 @@ async function* parseWebSocket(
         if (!event || typeof event !== "object" || !("data" in event)) {
           return;
         }
-        text = await decodeWebSocketData((event as { data?: unknown }).data);
+        // decodeWebSocketData enforces the byte-size limit before
+        // materializing the full payload; oversized frames throw a
+        // CodexProtocolError and close the socket with code 1009.
+        text = await decodeWebSocketData(
+          (event as { data?: unknown }).data,
+          MAX_WS_MESSAGE_BYTES,
+        );
         if (!text) {
-          return;
-        }
-        // Enforce per-message byte limit to prevent OOM from oversized
-        // frames.  This is transport-neutral (not ws-specific) so it works
-        // across Node, Bun, and browser globals.
-        if (text.length > MAX_WS_MESSAGE_BYTES) {
-          socket.close(
-            WEBSOCKET_MESSAGE_TOO_BIG_CLOSE_CODE,
-            "message exceeds size limit",
-          );
-          failed = new CodexProtocolError(
-            `WebSocket message exceeds maximum size of ${MAX_WS_MESSAGE_BYTES} bytes`,
-          );
-          done = true;
-          wake();
           return;
         }
         const parsed = JSON.parse(text) as Record<string, unknown>;
@@ -1343,7 +1363,19 @@ async function* parseWebSocket(
         queue.push(parsed);
         wake();
       } catch (cause) {
-        failed = new CodexProtocolError(
+        // Close the socket when the message exceeds the size limit so the
+        // peer is notified and the stream terminates promptly.
+        if (cause instanceof CodexProtocolError) {
+          try {
+            socket.close(
+              WEBSOCKET_MESSAGE_TOO_BIG_CLOSE_CODE,
+              "message exceeds size limit",
+            );
+          } catch {
+            // Best-effort close.
+          }
+        }
+        failed = cause instanceof Error ? cause : new CodexProtocolError(
           `Invalid Codex WebSocket JSON: ${formatThrownValue(cause)}`,
           {
             cause,
