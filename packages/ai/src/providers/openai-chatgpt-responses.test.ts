@@ -8,8 +8,10 @@ import type { Context, Model } from "../types.js";
 import { SYSTEM_PROMPT_CACHE_BOUNDARY } from "../utils/system-prompt-cache-boundary.js";
 import {
   closeOpenAICodexWebSocketSessions,
+  connectWebSocketForTest,
   extractOpenAICodexAccountId,
   parseSSEForTest,
+  parseWebSocketForTest,
   resetOpenAICodexWebSocketStateForTest,
   streamSimpleOpenAICodexResponses,
   streamOpenAICodexResponses,
@@ -1025,7 +1027,72 @@ describe("streamOpenAICodexResponses transport", () => {
     expect(pullCount).toBeLessThanOrEqual(3);
     expect(fetchMock).toHaveBeenCalledTimes(1);
   });
-});
+
+  it("rejects a stalled WebSocket upgrade with a handshake timeout error", async () => {
+    vi.useFakeTimers();
+    // A WebSocket that accepts TCP but never fires open/error/close.
+    vi.stubGlobal(
+      "WebSocket",
+      class NeverOpeningWebSocket {
+        close = vi.fn();
+        addEventListener = vi.fn();
+        removeEventListener = vi.fn();
+      },
+    );
+
+    const connectPromise = connectWebSocketForTest(
+      "ws://localhost:1",
+      new Headers(),
+      undefined,
+      5_000,
+    );
+    vi.advanceTimersByTime(5_000);
+    await expect(connectPromise).rejects.toThrow(
+      "WebSocket connection handshake timed out",
+    );
+    vi.useRealTimers();
+  });
+
+  it("rejects oversized WebSocket messages exceeding MAX_WS_MESSAGE_BYTES", async () => {
+    const events: { type: string; listener?: (e: unknown) => void }[] = [];
+    vi.stubGlobal(
+      "WebSocket",
+      class OversizeWebSocket {
+        close = vi.fn();
+        readyState = WebSocket.OPEN;
+        addEventListener = events.push.bind(events);
+        removeEventListener = vi.fn();
+      },
+    );
+
+    const connectPromise = connectWebSocketForTest(
+      "ws://localhost:1",
+      new Headers(),
+      undefined,
+      5_000,
+    );
+    // Fire open so the connection settles
+    for (const ev of events) {
+      if (ev.type === "open") {
+        ev.listener?.({});
+      }
+    }
+    const socket = await connectPromise;
+
+    // parseWebSocket registers a message listener, then oversized data errors
+    const gen = parseWebSocketForTest(socket);
+    const nextPromise = gen.next();
+
+    for (const ev of events) {
+      if (ev.type === "message") {
+        ev.listener?.({ data: "x".repeat(17 * 1024 * 1024 + 1) });
+      }
+    }
+
+    const result = await nextPromise;
+    expect(result.done).toBe(true);
+  });
+
 
 describe("parseSSEForTest", () => {
   it("bounds streamed OpenAI ChatGPT Responses success bodies without content-length", async () => {

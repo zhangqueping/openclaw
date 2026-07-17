@@ -84,6 +84,16 @@ const WEBSOCKET_CONNECTION_LIMIT_REACHED_CODE = "websocket_connection_limit_reac
 const OPENAI_CHATGPT_RESPONSES_ERROR_BODY_MAX_BYTES = 16 * 1024;
 const OPENAI_CHATGPT_RESPONSES_SUCCESS_BODY_MAX_BYTES = 16 * 1024 * 1024;
 
+// WebSocket connection handshake must complete within 30 s or the socket is
+// closed and the connection attempt is rejected. This is a transport-neutral
+// timeout (not ws-specific) so it works across Node, Bun, and browser globals.
+const CONNECT_WS_HANDSHAKE_TIMEOUT_MS = 30_000;
+
+// Maximum WebSocket message payload in bytes. Messages exceeding this size
+// trigger a close with code 1009 (Message Too Big) and reject the stream.
+// Set to the same value as OPENAI_CHATGPT_RESPONSES_SUCCESS_BODY_MAX_BYTES.
+const MAX_WS_MESSAGE_BYTES = 16 * 1024 * 1024;
+
 const CODEX_RESPONSE_STATUSES = new Set<CodexResponseStatus>([
   "completed",
   "incomplete",
@@ -1016,6 +1026,11 @@ function closeWebSocketSilently(socket: WebSocketLike, code = 1000, reason = "do
   } catch {}
 }
 
+// Export for test: verifies handshake timeout rejects stalled connections.
+export const connectWebSocketForTest = connectWebSocket;
+// Export for test: verifies oversized message rejection in parseWebSocket.
+export const parseWebSocketForTest = parseWebSocket;
+
 function scheduleSessionWebSocketExpiry(sessionId: string, entry: CachedWebSocketConnection): void {
   if (entry.idleTimer) {
     clearTimeout(entry.idleTimer);
@@ -1033,6 +1048,7 @@ async function connectWebSocket(
   url: string,
   headers: Headers,
   signal?: AbortSignal,
+  connectTimeoutMs?: number,
 ): Promise<WebSocketLike> {
   const WebSocketCtor = await getWebSocketConstructor();
   if (!WebSocketCtor) {
@@ -1047,15 +1063,25 @@ async function connectWebSocket(
     let socket: WebSocketLike;
 
     try {
-      socket = new WebSocketCtor(url, {
-        headers: wsHeaders,
-        handshakeTimeout: 30_000,
-        maxPayload: 25 * 1024 * 1024,
-      });
+      socket = new WebSocketCtor(url, { headers: wsHeaders });
     } catch (error) {
       reject(error instanceof Error ? error : new Error(String(error)));
       return;
     }
+
+    // Transport-neutral handshake deadline.  When the ws library is used,
+    // its handshakeTimeout field is not portable to browser or Bun globals,
+    // so we enforce the deadline via a timer and the existing cleanup path.
+    const handshakeTimer = setTimeout(() => {
+      if (settled) {
+        return;
+      }
+      settled = true;
+      cleanup();
+      socket.close(WEBSOCKET_MESSAGE_TOO_BIG_CLOSE_CODE, "handshake timeout");
+      reject(new Error("WebSocket connection handshake timed out"));
+    }, connectTimeoutMs ?? CONNECT_WS_HANDSHAKE_TIMEOUT_MS);
+    handshakeTimer.unref?.();
 
     const onOpen: WebSocketListener = () => {
       if (settled) {
@@ -1094,6 +1120,7 @@ async function connectWebSocket(
     };
 
     const cleanup = () => {
+      clearTimeout(handshakeTimer);
       socket.removeEventListener("open", onOpen);
       socket.removeEventListener("error", onError);
       socket.removeEventListener("close", onClose);
@@ -1286,6 +1313,21 @@ async function* parseWebSocket(
         }
         text = await decodeWebSocketData((event as { data?: unknown }).data);
         if (!text) {
+          return;
+        }
+        // Enforce per-message byte limit to prevent OOM from oversized
+        // frames.  This is transport-neutral (not ws-specific) so it works
+        // across Node, Bun, and browser globals.
+        if (text.length > MAX_WS_MESSAGE_BYTES) {
+          socket.close(
+            WEBSOCKET_MESSAGE_TOO_BIG_CLOSE_CODE,
+            "message exceeds size limit",
+          );
+          failed = new CodexProtocolError(
+            `WebSocket message exceeds maximum size of ${MAX_WS_MESSAGE_BYTES} bytes`,
+          );
+          done = true;
+          wake();
           return;
         }
         const parsed = JSON.parse(text) as Record<string, unknown>;
