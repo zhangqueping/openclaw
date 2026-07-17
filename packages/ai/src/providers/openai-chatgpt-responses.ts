@@ -1047,7 +1047,11 @@ async function connectWebSocket(
     let socket: WebSocketLike;
 
     try {
-      socket = new WebSocketCtor(url, { headers: wsHeaders });
+      socket = new WebSocketCtor(url, {
+        headers: wsHeaders,
+        handshakeTimeout: 30_000,
+        maxPayload: 25 * 1024 * 1024,
+      });
     } catch (error) {
       reject(error instanceof Error ? error : new Error(String(error)));
       return;
